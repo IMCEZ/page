@@ -2287,6 +2287,19 @@
                     <button class="save-btn" onclick="gameSaveSettings()">保存预设</button>
                 </div>
                 <div id="tab-log" class="tab-content">
+                    <div class="form-group">
+                        <label class="form-label">聊天记录管理（本地浏览器 / 云端）</label>
+                        <div class="chat-history-toolbar" style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:8px;">
+                            <button type="button" class="preset-btn primary" onclick="createNewConversationFromCharacter()">🆕 新建会话</button>
+                            <button type="button" class="preset-btn" onclick="refreshChatHistoryList()">🔄 刷新列表</button>
+                            <button type="button" class="preset-btn" onclick="document.getElementById('chatImportInput').click()">📥 导入 JSONL</button>
+                            <button type="button" class="preset-btn" onclick="exportCurrentConversation()">📤 导出当前会话 JSONL</button>
+                        </div>
+                        <div id="chatHistoryList" class="chat-history-list" style="max-height:220px;overflow-y:auto;border:1px solid rgba(255,255,255,0.08);border-radius:8px;padding:6px 8px;font-size:12px;color:var(--text-secondary);">
+                            <p style="margin:4px 0;">暂无会话记录，开始冒险或导入 JSONL 后将自动出现。</p>
+                        </div>
+                        <input type="file" id="chatImportInput" accept=".jsonl" style="display:none" onchange="handleImportChatFile(this)">
+                    </div>
                     <div id="logContainer" style="font-family: monospace; font-size: 12px; color: var(--text-secondary);"></div>
                 </div>
             </aside>
@@ -3541,6 +3554,522 @@ ${WORLD_LORE_SUMMARY}`;
         }
 
         let gameChatHistory = [];
+        let currentConversationId = null;
+        let chatStorage = null;
+
+        const CHAT_DB_NAME = 'astral_chronicles_chat_db';
+        const CHAT_DB_VERSION = 1;
+        const CHAT_STORE_NAME = 'conversations';
+
+        function openChatDb() {
+            return new Promise(function(resolve, reject) {
+                if (!window.indexedDB) {
+                    console.warn('[ChatStorage] 当前浏览器不支持 IndexedDB，将退回 localStorage。');
+                    resolve(null);
+                    return;
+                }
+                const req = indexedDB.open(CHAT_DB_NAME, CHAT_DB_VERSION);
+                req.onupgradeneeded = function(e) {
+                    const db = e.target.result;
+                    if (!db.objectStoreNames.contains(CHAT_STORE_NAME)) {
+                        const store = db.createObjectStore(CHAT_STORE_NAME, { keyPath: 'id' });
+                        store.createIndex('updatedAt', 'updatedAt', { unique: false });
+                    }
+                };
+                req.onsuccess = function() { resolve(req.result); };
+                req.onerror = function() { reject(req.error || new Error('打开聊天数据库失败')); };
+            });
+        }
+
+        function normalizeMessageForStorage(msg, idx, baseTime) {
+            const now = Date.now();
+            const ts = (msg && msg.timestamp) || (baseTime || now) + idx;
+            return {
+                id: msg && msg.id ? String(msg.id) : 'm_' + ts + '_' + idx,
+                role: msg && msg.role ? msg.role : 'assistant',
+                name: msg && msg.name ? msg.name : (msg.role === 'user' ? 'User' : 'Character'),
+                content: msg && typeof msg.content === 'string' ? msg.content : '',
+                timestamp: ts,
+                meta: msg && msg.meta ? msg.meta : null
+            };
+        }
+
+        function mapGameHistoryToMessages() {
+            const base = Date.now() - gameChatHistory.length;
+            const out = [];
+            for (let i = 0; i < gameChatHistory.length; i++) {
+                const item = gameChatHistory[i];
+                if (!item || !item.role || !item.content) continue;
+                out.push(normalizeMessageForStorage(item, i, base));
+            }
+            return out;
+        }
+
+        function mapMessagesToGameHistory(messages) {
+            const arr = [];
+            if (!Array.isArray(messages)) return arr;
+            for (let i = 0; i < messages.length; i++) {
+                const m = messages[i];
+                if (!m || !m.role) continue;
+                arr.push({
+                    role: m.role,
+                    content: m.content || '',
+                    timestamp: m.timestamp || Date.now(),
+                    name: m.name || null,
+                    meta: m.meta || null
+                });
+            }
+            return arr;
+        }
+
+        function LocalChatStorage() {
+            this._fallbackKey = 'astral_chat_conversations_fallback';
+        }
+
+        LocalChatStorage.prototype._withDb = async function(callback) {
+            const db = await openChatDb();
+            if (!db) {
+                return callback(null);
+            }
+            return callback(db);
+        };
+
+        LocalChatStorage.prototype.listConversations = async function() {
+            try {
+                return await this._withDb(function(db) {
+                    return new Promise(function(resolve, reject) {
+                        if (!db) {
+                            try {
+                                const raw = localStorage.getItem('astral_chat_conversations_fallback');
+                                if (!raw) return resolve([]);
+                                const list = JSON.parse(raw);
+                                resolve(Array.isArray(list) ? list : []);
+                            } catch (e) {
+                                console.warn('[ChatStorage] 读取 localStorage 失败', e);
+                                resolve([]);
+                            }
+                            return;
+                        }
+                        const tx = db.transaction(CHAT_STORE_NAME, 'readonly');
+                        const store = tx.objectStore(CHAT_STORE_NAME);
+                        const req = store.getAll();
+                        req.onsuccess = function() {
+                            const list = req.result || [];
+                            list.sort(function(a, b) { return (b.updatedAt || 0) - (a.updatedAt || 0); });
+                            resolve(list);
+                        };
+                        req.onerror = function() { reject(req.error || new Error('读取会话列表失败')); };
+                    });
+                });
+            } catch (e) {
+                console.error('[ChatStorage] listConversations 出错', e);
+                return [];
+            }
+        };
+
+        LocalChatStorage.prototype.getConversation = async function(id) {
+            if (!id) return null;
+            try {
+                return await this._withDb(function(db) {
+                    return new Promise(function(resolve, reject) {
+                        if (!db) {
+                            try {
+                                const raw = localStorage.getItem('astral_chat_conversations_fallback');
+                                if (!raw) return resolve(null);
+                                const list = JSON.parse(raw);
+                                if (!Array.isArray(list)) return resolve(null);
+                                const found = list.find(function(c) { return c.id === id; }) || null;
+                                resolve(found);
+                            } catch (e) {
+                                console.warn('[ChatStorage] 读取 localStorage 失败', e);
+                                resolve(null);
+                            }
+                            return;
+                        }
+                        const tx = db.transaction(CHAT_STORE_NAME, 'readonly');
+                        const store = tx.objectStore(CHAT_STORE_NAME);
+                        const req = store.get(id);
+                        req.onsuccess = function() { resolve(req.result || null); };
+                        req.onerror = function() { reject(req.error || new Error('读取会话失败')); };
+                    });
+                });
+            } catch (e) {
+                console.error('[ChatStorage] getConversation 出错', e);
+                return null;
+            }
+        };
+
+        LocalChatStorage.prototype.saveConversation = async function(conv) {
+            if (!conv || !conv.id) return;
+            conv.updatedAt = conv.updatedAt || Date.now();
+            try {
+                await this._withDb(function(db) {
+                    return new Promise(function(resolve, reject) {
+                        if (!db) {
+                            try {
+                                const raw = localStorage.getItem('astral_chat_conversations_fallback');
+                                let list = [];
+                                if (raw) {
+                                    const parsed = JSON.parse(raw);
+                                    if (Array.isArray(parsed)) list = parsed;
+                                }
+                                const idx = list.findIndex(function(c) { return c.id === conv.id; });
+                                if (idx >= 0) list[idx] = conv;
+                                else list.push(conv);
+                                localStorage.setItem('astral_chat_conversations_fallback', JSON.stringify(list));
+                            } catch (e) {
+                                console.warn('[ChatStorage] 写入 localStorage 失败', e);
+                            }
+                            resolve();
+                            return;
+                        }
+                        const tx = db.transaction(CHAT_STORE_NAME, 'readwrite');
+                        const store = tx.objectStore(CHAT_STORE_NAME);
+                        const req = store.put(conv);
+                        req.onsuccess = function() { resolve(); };
+                        req.onerror = function() { reject(req.error || new Error('保存会话失败')); };
+                    });
+                });
+            } catch (e) {
+                console.error('[ChatStorage] saveConversation 出错', e);
+            }
+        };
+
+        LocalChatStorage.prototype.deleteConversation = async function(id) {
+            if (!id) return;
+            try {
+                await this._withDb(function(db) {
+                    return new Promise(function(resolve, reject) {
+                        if (!db) {
+                            try {
+                                const raw = localStorage.getItem('astral_chat_conversations_fallback');
+                                if (!raw) return resolve();
+                                const list = JSON.parse(raw);
+                                if (!Array.isArray(list)) return resolve();
+                                const next = list.filter(function(c) { return c.id !== id; });
+                                localStorage.setItem('astral_chat_conversations_fallback', JSON.stringify(next));
+                            } catch (e) {
+                                console.warn('[ChatStorage] 删除 localStorage 会话失败', e);
+                            }
+                            resolve();
+                            return;
+                        }
+                        const tx = db.transaction(CHAT_STORE_NAME, 'readwrite');
+                        const store = tx.objectStore(CHAT_STORE_NAME);
+                        const req = store.delete(id);
+                        req.onsuccess = function() { resolve(); };
+                        req.onerror = function() { reject(req.error || new Error('删除会话失败')); };
+                    });
+                });
+            } catch (e) {
+                console.error('[ChatStorage] deleteConversation 出错', e);
+            }
+        };
+
+        LocalChatStorage.prototype.importFromJsonlText = async function(text) {
+            const lines = (text || '').split(/\r?\n/).map(function(l) { return l.trim(); }).filter(Boolean);
+            if (!lines.length) throw new Error('JSONL 内容为空');
+            const now = Date.now();
+            const messages = [];
+            let lineNo = 0;
+            for (let i = 0; i < lines.length; i++) {
+                lineNo = i + 1;
+                const raw = lines[i];
+                let obj;
+                try {
+                    obj = JSON.parse(raw);
+                } catch (e) {
+                    console.warn('[ChatStorage] 跳过无法解析的 JSONL 行', lineNo, e);
+                    continue;
+                }
+                const name = (obj && obj.name) || '';
+                const mes = (obj && obj.mes) || '';
+                if (!mes) continue;
+                let role = 'assistant';
+                if (name.toLowerCase() === 'user') role = 'user';
+                else if (name.toLowerCase() === 'assistant' || name.toLowerCase() === 'character') role = 'assistant';
+                const msg = normalizeMessageForStorage({
+                    role: role,
+                    name: name || (role === 'user' ? 'User' : 'Character'),
+                    content: mes
+                }, i, now);
+                messages.push(msg);
+            }
+            if (!messages.length) throw new Error('未能从 JSONL 中解析出有效消息');
+            const convId = 'chat_' + now;
+            const conv = {
+                id: convId,
+                title: '导入会话 · ' + new Date(now).toLocaleString(),
+                createdAt: now,
+                updatedAt: now,
+                source: 'local',
+                messages: messages
+            };
+            await this.saveConversation(conv);
+            return conv;
+        };
+
+        LocalChatStorage.prototype.exportConversationToJsonl = async function(id) {
+            const conv = await this.getConversation(id);
+            if (!conv || !Array.isArray(conv.messages)) throw new Error('未找到会话或会话为空');
+            const lines = [];
+            conv.messages.forEach(function(m) {
+                if (!m || !m.content) return;
+                if (m.role !== 'user' && m.role !== 'assistant') return;
+                const name = m.name || (m.role === 'user' ? 'User' : 'Character');
+                lines.push(JSON.stringify({ name: name, mes: m.content }));
+            });
+            return lines.join('\n');
+        };
+
+        function RemoteChatStorage(baseUrl) {
+            this.baseUrl = (baseUrl || '').replace(/\/+$/, '');
+        }
+
+        RemoteChatStorage.prototype._request = async function(path, options) {
+            const url = this.baseUrl + path;
+            const res = await fetch(url, options || {});
+            if (!res.ok) throw new Error('远程存储请求失败：' + res.status);
+            if (res.status === 204) return null;
+            return res.json();
+        };
+
+        RemoteChatStorage.prototype.listConversations = async function() {
+            const data = await this._request('/api/chats', { method: 'GET', headers: { 'Authorization': gameToken ? ('Bearer ' + gameToken) : '' } });
+            return Array.isArray(data) ? data : (data && data.items) || [];
+        };
+
+        RemoteChatStorage.prototype.getConversation = async function(id) {
+            if (!id) return null;
+            return this._request('/api/chats/' + encodeURIComponent(id), { method: 'GET', headers: { 'Authorization': gameToken ? ('Bearer ' + gameToken) : '' } });
+        };
+
+        RemoteChatStorage.prototype.saveConversation = async function(conv) {
+            if (!conv || !conv.id) return;
+            const headers = { 'Content-Type': 'application/json' };
+            if (gameToken) headers['Authorization'] = 'Bearer ' + gameToken;
+            await fetch(this.baseUrl + '/api/chats/' + encodeURIComponent(conv.id), {
+                method: 'PUT',
+                headers: headers,
+                body: JSON.stringify(conv)
+            });
+        };
+
+        RemoteChatStorage.prototype.deleteConversation = async function(id) {
+            if (!id) return;
+            const headers = {};
+            if (gameToken) headers['Authorization'] = 'Bearer ' + gameToken;
+            await fetch(this.baseUrl + '/api/chats/' + encodeURIComponent(id), {
+                method: 'DELETE',
+                headers: headers
+            });
+        };
+
+        RemoteChatStorage.prototype.importFromJsonlText = async function(text) {
+            const headers = { 'Content-Type': 'text/plain' };
+            if (gameToken) headers['Authorization'] = 'Bearer ' + gameToken;
+            const res = await fetch(this.baseUrl + '/api/chats/import-jsonl', {
+                method: 'POST',
+                headers: headers,
+                body: text
+            });
+            if (!res.ok) throw new Error('远程导入 JSONL 失败：' + res.status);
+            return res.json();
+        };
+
+        RemoteChatStorage.prototype.exportConversationToJsonl = async function(id) {
+            if (!id) throw new Error('缺少会话 ID');
+            const headers = {};
+            if (gameToken) headers['Authorization'] = 'Bearer ' + gameToken;
+            const res = await fetch(this.baseUrl + '/api/chats/' + encodeURIComponent(id) + '/export-jsonl', {
+                method: 'GET',
+                headers: headers
+            });
+            if (!res.ok) throw new Error('远程导出 JSONL 失败：' + res.status);
+            return res.text();
+        };
+
+        function createChatStorage() {
+            if (API_BASE) {
+                try {
+                    return new RemoteChatStorage(API_BASE);
+                } catch (e) {
+                    console.warn('[ChatStorage] 初始化远程存储失败，退回本地存储', e);
+                }
+            }
+            return new LocalChatStorage();
+        }
+
+        async function syncGameHistoryToStorage() {
+            try {
+                if (!chatStorage) chatStorage = createChatStorage();
+                const messages = mapGameHistoryToMessages();
+                if (!messages.length) return;
+                const now = Date.now();
+                const rawChar = sessionStorage.getItem(STORAGE_KEYS.createdCharacter);
+                let character = null;
+                try { character = rawChar ? JSON.parse(rawChar) : null; } catch (_) { character = null; }
+                const titleBase = (character && character.name) ? character.name : '冒险者';
+                const convId = currentConversationId || ('chat_' + now);
+                const conv = {
+                    id: convId,
+                    title: titleBase + '的冒险 · ' + new Date(now).toLocaleDateString(),
+                    createdAt: now,
+                    updatedAt: now,
+                    source: API_BASE ? 'cloud' : 'local',
+                    messages: messages
+                };
+                await chatStorage.saveConversation(conv);
+                currentConversationId = convId;
+                await refreshChatHistoryList();
+            } catch (e) {
+                console.warn('[ChatStorage] 同步聊天记录失败', e);
+            }
+        }
+
+        async function loadConversationIntoGame(id) {
+            try {
+                if (!id) return;
+                if (!chatStorage) chatStorage = createChatStorage();
+                const conv = await chatStorage.getConversation(id);
+                if (!conv || !Array.isArray(conv.messages) || !conv.messages.length) {
+                    showToast('选中的会话为空或不存在');
+                    return;
+                }
+                const messages = mapMessagesToGameHistory(conv.messages);
+                if (!messages.length) return;
+                // 保留系统提示为第一条，其余按存储内容覆盖
+                const systemPrompt = gameChatHistory[0] && gameChatHistory[0].role === 'system'
+                    ? gameChatHistory[0]
+                    : { role: 'system', content: getGMSystemPrompt(null) };
+                gameChatHistory = [systemPrompt].concat(messages.filter(function(m) { return m.role === 'user' || m.role === 'assistant'; }));
+                currentConversationId = conv.id;
+                renderGameChat();
+                showToast('已加载会话：' + (conv.title || conv.id));
+            } catch (e) {
+                console.warn('[ChatStorage] 加载会话失败', e);
+                showToast('加载会话失败：' + (e.message || '未知错误'));
+            }
+        }
+
+        async function refreshChatHistoryList() {
+            try {
+                const listEl = document.getElementById('chatHistoryList');
+                if (!listEl) return;
+                if (!chatStorage) chatStorage = createChatStorage();
+                const list = await chatStorage.listConversations();
+                if (!list.length) {
+                    listEl.innerHTML = '<p style="margin:4px 0;">暂无会话记录。</p>';
+                    return;
+                }
+                const htmlParts = [];
+                list.forEach(function(c) {
+                    const isCurrent = c.id === currentConversationId;
+                    const where = c.source === 'cloud' ? '云端' : '本地';
+                    const timeStr = c.updatedAt ? new Date(c.updatedAt).toLocaleString() : '';
+                    const title = escapeHtml((c.title || '未命名会话') + '（' + where + '）');
+                    htmlParts.push(
+                        '<div class="chat-history-item" style="display:flex;align-items:center;justify-content:space-between;padding:6px 4px;border-bottom:1px solid rgba(255,255,255,0.06);cursor:pointer;">' +
+                            '<div style="flex:1;min-width:0;" onclick="loadConversationIntoGame(\'' + c.id.replace(/'/g, "\\'") + '\')">' +
+                                '<div style="font-size:12px;color:' + (isCurrent ? 'var(--accent-gold)' : '#e8e8e8') + ';white-space:nowrap;text-overflow:ellipsis;overflow:hidden;">' + title + '</div>' +
+                                '<div style="font-size:11px;color:var(--text-secondary);">' + escapeHtml(timeStr) + '</div>' +
+                            '</div>' +
+                            '<button type="button" class="preset-btn" style="margin-left:6px;font-size:11px;padding:2px 6px;color:#e74c3c;border-color:rgba(231,76,60,0.6);" onclick="deleteConversationConfirm(\'' + c.id.replace(/'/g, "\\'") + '\', event)">🗑</button>' +
+                        '</div>'
+                    );
+                });
+                listEl.innerHTML = htmlParts.join('');
+            } catch (e) {
+                console.warn('[ChatStorage] 刷新会话列表失败', e);
+            }
+        }
+
+        async function deleteConversationConfirm(id, event) {
+            if (event && event.stopPropagation) event.stopPropagation();
+            if (!id) return;
+            if (!confirm('确定要删除该会话吗？此操作不可恢复。')) return;
+            try {
+                if (!chatStorage) chatStorage = createChatStorage();
+                await chatStorage.deleteConversation(id);
+                if (id === currentConversationId) {
+                    currentConversationId = null;
+                }
+                await refreshChatHistoryList();
+                showToast('会话已删除');
+            } catch (e) {
+                console.warn('[ChatStorage] 删除会话失败', e);
+                showToast('删除会话失败：' + (e.message || '未知错误'));
+            }
+        }
+
+        async function handleImportChatFile(input) {
+            const file = input && input.files && input.files[0];
+            if (!file) return;
+            try {
+                const text = await file.text();
+                if (!chatStorage) chatStorage = createChatStorage();
+                const conv = await chatStorage.importFromJsonlText(text);
+                showToast('已导入会话：' + (conv.title || conv.id));
+                await refreshChatHistoryList();
+            } catch (e) {
+                console.warn('[ChatStorage] 导入 JSONL 失败', e);
+                showToast('导入 JSONL 失败：' + (e.message || '未知错误'));
+            } finally {
+                input.value = '';
+            }
+        }
+
+        async function exportCurrentConversation() {
+            try {
+                if (!currentConversationId) {
+                    showToast('当前还没有可导出的会话');
+                    return;
+                }
+                if (!chatStorage) chatStorage = createChatStorage();
+                const content = await chatStorage.exportConversationToJsonl(currentConversationId);
+                const blob = new Blob([content], { type: 'text/plain;charset=utf-8' });
+                const a = document.createElement('a');
+                const now = new Date();
+                const dateStr = now.getFullYear() + '-' + String(now.getMonth() + 1).padStart(2, '0') + '-' + String(now.getDate()).padStart(2, '0');
+                a.href = URL.createObjectURL(blob);
+                a.download = 'astral_chat_' + dateStr + '.jsonl';
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                URL.revokeObjectURL(a.href);
+                showToast('已导出当前会话');
+            } catch (e) {
+                console.warn('[ChatStorage] 导出 JSONL 失败', e);
+                showToast('导出 JSONL 失败：' + (e.message || '未知错误'));
+            }
+        }
+
+        async function createNewConversationFromCharacter() {
+            try {
+                const raw = sessionStorage.getItem(STORAGE_KEYS.createdCharacter);
+                let character = null;
+                try { character = raw ? JSON.parse(raw) : null; } catch (_) { character = null; }
+                const titleBase = (character && character.name) ? character.name : '冒险者';
+                const now = Date.now();
+                const convId = 'chat_' + now;
+                if (!chatStorage) chatStorage = createChatStorage();
+                const conv = {
+                    id: convId,
+                    title: titleBase + '的新冒险 · ' + new Date(now).toLocaleDateString(),
+                    createdAt: now,
+                    updatedAt: now,
+                    source: API_BASE ? 'cloud' : 'local',
+                    messages: mapGameHistoryToMessages()
+                };
+                await chatStorage.saveConversation(conv);
+                currentConversationId = convId;
+                await refreshChatHistoryList();
+                showToast('已创建新会话');
+            } catch (e) {
+                console.warn('[ChatStorage] 创建新会话失败', e);
+                showToast('创建新会话失败：' + (e.message || '未知错误'));
+            }
+        }
 
         function createMessageRow(historyIndex, role, content) {
             const character = JSON.parse(sessionStorage.getItem(STORAGE_KEYS.createdCharacter) || '{}');
@@ -3596,6 +4125,7 @@ ${WORLD_LORE_SUMMARY}`;
             if (historyIndex < 1 || historyIndex >= gameChatHistory.length) return;
             gameChatHistory.splice(historyIndex, 1);
             renderGameChat();
+            syncGameHistoryToStorage();
         }
 
         function gameResendUserMessage(historyIndex) {
@@ -3604,7 +4134,7 @@ ${WORLD_LORE_SUMMARY}`;
             if (item.role !== 'user') return;
             gameChatHistory.splice(historyIndex + 1, gameChatHistory.length - historyIndex - 1);
             renderGameChat();
-            gameRequestAIAndAppend();
+            gameRequestAIAndAppend().then(function() { syncGameHistoryToStorage(); });
         }
 
         function gameRegenerateAI(historyIndex) {
@@ -3613,7 +4143,7 @@ ${WORLD_LORE_SUMMARY}`;
             if (item.role !== 'assistant') return;
             gameChatHistory.splice(historyIndex, gameChatHistory.length - historyIndex);
             renderGameChat();
-            gameRequestAIAndAppend();
+            gameRequestAIAndAppend().then(function() { syncGameHistoryToStorage(); });
         }
 
         async function gameRequestAIAndAppend() {
@@ -3638,16 +4168,16 @@ ${WORLD_LORE_SUMMARY}`;
                     if (!res.ok) throw new Error('API ' + res.status);
                     const data = await res.json();
                     const reply = (data.choices && data.choices[0] && data.choices[0].message) ? data.choices[0].message.content : '（无回复）';
-                    gameChatHistory.push({ role: 'assistant', content: reply });
+                    gameChatHistory.push({ role: 'assistant', content: reply, timestamp: Date.now(), name: 'Character' });
                     applyStateFromAiReply(reply);
                     chatArea.appendChild(createMessageRow(gameChatHistory.length - 1, 'assistant', reply));
                 } else {
                     const reply = '你迈出一步，艾瑟拉大陆的风拂过面庞。（请配置 API 后获得完整 AI 回复）';
-                    gameChatHistory.push({ role: 'assistant', content: reply });
+                    gameChatHistory.push({ role: 'assistant', content: reply, timestamp: Date.now(), name: 'Character' });
                     chatArea.appendChild(createMessageRow(gameChatHistory.length - 1, 'assistant', reply));
                 }
             } catch (err) {
-                gameChatHistory.push({ role: 'assistant', content: '[错误] ' + (err.message || String(err)) });
+                gameChatHistory.push({ role: 'assistant', content: '[错误] ' + (err.message || String(err)), timestamp: Date.now(), name: 'Character' });
                 chatArea.appendChild(createMessageRow(gameChatHistory.length - 1, 'assistant', '[错误] ' + (err.message || String(err))));
             }
             chatArea.scrollTop = chatArea.scrollHeight;
@@ -3709,7 +4239,7 @@ ${WORLD_LORE_SUMMARY}`;
             document.getElementById('mpBar').style.width = '100%';
 
             // 初始化对话历史，仅包含系统提示
-            gameChatHistory = [{ role: 'system', content: getGMSystemPrompt(character) }];
+            gameChatHistory = [{ role: 'system', content: getGMSystemPrompt(character), timestamp: Date.now(), name: 'System' }];
 
             // 手动构建聊天区域初始内容
             const chatArea = document.getElementById('chatArea');
@@ -3771,6 +4301,7 @@ ${WORLD_LORE_SUMMARY}`;
             if (sendBtnEl) sendBtnEl.disabled = true;
 
             autoGenerateOpening(character);
+            refreshChatHistoryList();
 
             document.getElementById('userInput').addEventListener('keydown', function(e) {
                 if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); gameSendMessage(); }
@@ -3837,7 +4368,7 @@ ${WORLD_LORE_SUMMARY}`;
                     : '';
                 const reply = (text || '').trim() || '（未生成到内容）';
 
-                gameChatHistory.push({ role: 'assistant', content: reply });
+                gameChatHistory.push({ role: 'assistant', content: reply, timestamp: Date.now(), name: 'Character' });
                 applyStateFromAiReply(reply);
 
                 if (loadingRow && loadingRow.parentNode) {
@@ -3849,6 +4380,7 @@ ${WORLD_LORE_SUMMARY}`;
                     chatArea.appendChild(row);
                     chatArea.scrollTop = chatArea.scrollHeight;
                 }
+                await syncGameHistoryToStorage();
             } catch (err) {
                 if (loadingRow) {
                     loadingRow.innerHTML =
@@ -3869,11 +4401,12 @@ ${WORLD_LORE_SUMMARY}`;
             const text = input.value.trim();
             if (!text) return;
             const chatArea = document.getElementById('chatArea');
-            gameChatHistory.push({ role: 'user', content: text });
+            gameChatHistory.push({ role: 'user', content: text, timestamp: Date.now(), name: 'User' });
             chatArea.appendChild(createMessageRow(gameChatHistory.length - 1, 'user', text));
             chatArea.scrollTop = chatArea.scrollHeight;
             input.value = '';
             await gameRequestAIAndAppend();
+            await syncGameHistoryToStorage();
         }
 
         function gameSaveSettings() {
@@ -3917,6 +4450,15 @@ ${WORLD_LORE_SUMMARY}`;
             document.getElementById('game-view').style.display = 'none';
             document.getElementById('creation-view').style.display = 'block';
         }
+
+        window.addEventListener('beforeunload', function() {
+            try {
+                if (gameChatHistory && gameChatHistory.length > 1) {
+                    // 尽力而为的同步，不等待完成
+                    syncGameHistoryToStorage();
+                }
+            } catch (_) {}
+        });
 
         // ---------- 登录 / 注册一体化逻辑（Supabase + 游戏） ----------
         const API_BASE = "";
