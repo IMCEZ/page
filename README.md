@@ -7,7 +7,7 @@
 - 对话消息记录（`messages` 表）
 - 调用 LLM 接口（兼容 OpenAI 风格 `/chat/completions`）
 
-前端是移动端优先的单页聊天界面，通过 `public/index.html + style.css + app.js` 实现；后端通过 `api/*.js` 作为 Vercel Serverless Functions 提供 REST API。
+前端现在由 **React + Vite 美化版应用** 提供（源码在 `Kimi_Agent_三端适配美化/app`，构建产物同步到 `public/index.html + public/assets/*`），旧版的单页 HTML/JS/CSS 实现仍保留在仓库中作为参考；后端通过 `api/*.js` 作为 Vercel Serverless Functions 提供 REST API。
 
 ---
 
@@ -258,3 +258,32 @@ git push -u origin main
 
 - API Key 仅保存在本机，请勿在公共设备上使用。
 - 若无法生成开场白或游戏内无回复，请检查 API 地址、Key 及网络/CORS。
+
+---
+
+## 当前前端结构与旧版前端
+
+- **主前端（当前在用）**
+  - 源码：`Kimi_Agent_三端适配美化/app`（React + Vite 工程）。
+  - 构建：在项目根目录执行：
+    - `npm run build`（内部会在子目录中运行 `npm ci && npm run build` 并将 `dist/` 同步到 `public/`）。
+  - 运行时入口：
+    - `public/index.html`（Vite 生成的入口模板）
+    - `public/assets/*`（打包后的 JS/CSS 等静态资源）
+
+- **旧版前端（Legacy frontend，已归档，仅作参考）**
+  - 旧实现主要由以下文件组成：
+    - `public/style.css`
+    - `public/supabase.min.js`
+    - `js/config.js`
+  - 这些文件对应的是早期的“单文件 HTML + 原生 JS”交互逻辑，当前线上流程不会主动加载它们，只保留在仓库中方便对比与迁移。
+
+> 建议今后的页面与交互能力都以 React + Vite 应用为主，若需要从旧版迁移某些样式或逻辑，可以有选择地参考上述 legacy 文件。
+
+---
+
+## package/ 目录说明
+
+- 仓库根目录下的 `package/` 目录是上游 **Express 4.x 的源码快照**，主要用于对照阅读与调试。
+- 实际运行时使用的 Express 依赖来自根目录的 `package.json`（通过 `npm install` 安装到 `node_modules/express`），`package/` 本身不会被 `require` / `import` 到业务代码中。
+- 如果未来确定不再需要查看这份源码，可以整体删除 `package/` 目录；目前根据需要先保留。

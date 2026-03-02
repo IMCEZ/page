@@ -25,7 +25,7 @@ const port = process.env.PORT || 3000;
 
 const rootDir = __dirname;
 const apiDir = path.join(rootDir, "api");
-const staticRoot = rootDir;
+const staticRoot = path.join(rootDir, "public");
 
 app.use(express.json());
 
@@ -59,13 +59,12 @@ app.all("/api/*", async (req, res, next) => {
   }
 });
 
-// 静态文件：优先从项目根目录提供（包括 index.html、js、assets、public 等）
+// 静态文件：从 public/ 提供（与 Vercel 行为一致）
 app.use(express.static(staticRoot));
-app.use("/public", express.static(path.join(rootDir, "public")));
 
-// 对于未匹配到静态文件的路径，统一返回根目录的 index.html（游戏 + 登录一体化入口）
+// 对于未匹配到静态文件的路径，统一返回 public/index.html（SPA 入口）
 app.use((req, res) => {
-  res.sendFile(path.join(rootDir, "index.html"));
+  res.sendFile(path.join(staticRoot, "index.html"));
 });
 
 app.listen(port, () => {

@@ -1,4 +1,11 @@
 /**
+ * 【Legacy / 旧版前端脚本】
+ * 本文件属于早期的单页前端实现，仅作为参考保留。
+ * 当前线上与本地推荐使用的前端是 React + Vite 应用（见 Kimi_Agent_三端适配美化/app），
+ * 运行时不会主动从 public/index.html 中加载此脚本，除非你手动引用。
+ */
+
+/**
  * ASTRAL CHRONICLES / Azure Legend - 共享配置
  * API 配置与角色数据在 creation 与 game 视图间共享
  */

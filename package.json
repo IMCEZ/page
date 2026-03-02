@@ -5,7 +5,10 @@
   "private": true,
   "scripts": {
     "dev": "vercel dev",
-    "start": "vercel dev"
+    "start": "vercel dev",
+    "build:ui": "npm --prefix \"Kimi_Agent_三端适配美化/app\" ci && npm --prefix \"Kimi_Agent_三端适配美化/app\" run build",
+    "sync:ui": "node scripts/sync-vite-dist-to-public.mjs",
+    "build": "npm run build:ui && npm run sync:ui"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.45.0",
