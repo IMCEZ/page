@@ -2308,6 +2308,107 @@
         }
         const supabaseClient = createClient ? createClient(SUPABASE_URL, SUPABASE_ANON_KEY) : null;
 
+        // 🔧 FIX: 全局 auth 状态管理 —— 必须在 createClient 后立即注册，否则会丢失事件
+        let _authDomReady = false;
+        let _authSessionResolved = false;  // 标记是否已确定登录状态
+        let _pendingSession = null;        // DOM 未就绪时暂存 session
+
+        /**
+         * 检测当前 URL 是否是 OAuth 回调（Discord 跳回来时带 ?code=xxx）
+         */
+        function isOAuthCallback() {
+            const params = new URLSearchParams(window.location.search);
+            const hash = window.location.hash || '';
+            return params.has('code') || 
+                   hash.includes('access_token') || 
+                   hash.includes('refresh_token');
+        }
+
+        /**
+         * 应用会话并隐藏登录覆盖层（DOM 安全版）
+         */
+        function applyAndHide(session) {
+            if (!session || !session.user) return;
+            _authSessionResolved = true;
+            _pendingSession = session;
+
+            // 提取用户信息
+            const user = session.user;
+            const meta = user.user_metadata || {};
+            gameUser = {
+                id: user.id,
+                email: user.email || '',
+                nickname: meta.full_name || meta.name || 
+                          (meta.custom_claims && meta.custom_claims.global_name) || 
+                          meta.preferred_username || '',
+                username: meta.preferred_username || meta.name || '',
+                discord_avatar: meta.avatar_url || '',
+                auth_provider: (user.app_metadata && user.app_metadata.provider) || 'unknown'
+            };
+            gameToken = session.access_token;
+            localStorage.setItem('token', gameToken);
+            localStorage.setItem('user', JSON.stringify(gameUser));
+
+            console.log('[Auth] 会话已应用:', gameUser.nickname || gameUser.email,
+                        '| provider:', gameUser.auth_provider);
+
+            // 如果 DOM 已就绪，立即隐藏登录页
+            if (_authDomReady) {
+                const overlay = document.getElementById('authOverlay');
+                if (overlay) overlay.classList.add('hidden');
+                cleanUrlHashGlobal();
+                fillNicknameIfEmpty();
+            }
+            // 否则 initAuthOverlay() 中会检查 _pendingSession
+        }
+
+        function cleanUrlHashGlobal() {
+            const href = window.location.href;
+            if (window.location.search.includes('code=') ||
+                (window.location.hash && (
+                    window.location.hash.includes('access_token') ||
+                    window.location.hash.includes('refresh_token')
+                ))) {
+                window.history.replaceState({}, document.title, 
+                    window.location.pathname);
+                console.log('[Auth] 已清除 URL 回调参数');
+            }
+        }
+
+        function fillNicknameIfEmpty() {
+            if (gameUser && gameUser.nickname) {
+                const nameInput = document.getElementById('authNickname');
+                if (nameInput && !nameInput.value) nameInput.value = gameUser.nickname;
+                const realNameInput = document.getElementById('realName');
+                if (realNameInput && !realNameInput.value) realNameInput.value = gameUser.nickname;
+            }
+        }
+
+        // 🔧 核心修复：立即注册 onAuthStateChange（不等 window.onload）
+        if (supabaseClient) {
+            supabaseClient.auth.onAuthStateChange(function(event, session) {
+                console.log('[Auth] onAuthStateChange 事件:', event,
+                            session ? '✅ 有会话' : '❌ 无会话');
+
+                if (['SIGNED_IN', 'INITIAL_SESSION', 'TOKEN_REFRESHED'].includes(event) 
+                    && session && session.user) {
+                    applyAndHide(session);
+                } else if (event === 'SIGNED_OUT') {
+                    gameToken = '';
+                    gameUser = null;
+                    localStorage.removeItem('token');
+                    localStorage.removeItem('user');
+                    _authSessionResolved = true;
+                    _pendingSession = null;
+                    if (_authDomReady) {
+                        const overlay = document.getElementById('authOverlay');
+                        if (overlay) overlay.classList.remove('hidden');
+                    }
+                    console.log('[Auth] 用户已登出');
+                }
+            });
+        }
+
         // 全局状态
         let currentStep = 1;
         const totalSteps = 8;
@@ -3885,6 +3986,8 @@ ${WORLD_LORE_SUMMARY}`;
         });
 
         function initAuthOverlay() {
+            _authDomReady = true;  // 🔧 标记 DOM 已就绪
+
             const overlay = document.getElementById('authOverlay');
             const emailInput = document.getElementById('authEmail');
             const passwordInput = document.getElementById('authPassword');
@@ -3895,135 +3998,142 @@ ${WORLD_LORE_SUMMARY}`;
 
             if (!overlay || !emailInput || !passwordInput || !loginBtn || !registerBtn) return;
 
-            function hideOverlay() {
+            // 🔧 FIX 1: 如果全局监听器已经拿到了 session，直接隐藏
+            if (_pendingSession && _authSessionResolved) {
+                console.log('[Auth] initAuthOverlay: 使用已缓存的 session，直接隐藏登录页');
                 overlay.classList.add('hidden');
-                console.log('[Auth] 登录覆盖层已隐藏');
+                cleanUrlHashGlobal();
+                fillNicknameIfEmpty();
+                bindEmailLoginButtons();  // 仍然绑定按钮事件
+                return;
             }
 
-            function showOverlay() {
-                overlay.classList.remove('hidden');
-            }
+            // 🔧 FIX 2: 如果 URL 表明是 OAuth 回调，显示加载状态而非登录表单
+            const inCallback = isOAuthCallback();
+            if (inCallback && !_authSessionResolved) {
+                console.log('[Auth] 检测到 OAuth 回调，等待 Supabase 处理...');
+                if (errorEl) errorEl.textContent = '';
 
-            /**
-             * 从 Supabase session 中提取用户信息并存储到 localStorage
-             */
-            function applySession(session) {
-                if (!session || !session.user) return false;
-                const user = session.user;
-                const meta = user.user_metadata || {};
-                gameUser = {
-                    id: user.id,
-                    email: user.email || '',
-                    nickname: meta.full_name || meta.name || (meta.custom_claims && meta.custom_claims.global_name) || meta.preferred_username || '',
-                    username: meta.preferred_username || meta.name || '',
-                    discord_avatar: meta.avatar_url || '',
-                    auth_provider: (user.app_metadata && user.app_metadata.provider) || 'unknown'
-                };
-                gameToken = session.access_token;
-                localStorage.setItem('token', gameToken);
-                localStorage.setItem('user', JSON.stringify(gameUser));
-                console.log('[Auth] 会话已应用:', gameUser.nickname || gameUser.email, '| provider:', gameUser.auth_provider);
-                return true;
-            }
-
-            /**
-             * 清除 URL 中的 hash 参数（Supabase 回调会带上 #access_token=...）
-             */
-            function cleanUrlHash() {
-                if (window.location.hash && (
-                    window.location.hash.includes('access_token') ||
-                    window.location.hash.includes('refresh_token') ||
-                    window.location.hash.includes('token_type')
-                )) {
-                    window.history.replaceState({}, document.title, window.location.pathname + window.location.search);
-                    console.log('[Auth] 已清除 URL hash');
+                // 给用户一个视觉反馈：正在处理中
+                if (loginBtn) loginBtn.disabled = true;
+                if (registerBtn) registerBtn.disabled = true;
+                const discordBtn = document.getElementById('authDiscordBtn');
+                if (discordBtn) {
+                    discordBtn.classList.add('loading');
+                    discordBtn.innerHTML = '⏳ 正在完成 Discord 登录...';
                 }
             }
 
-            // ===== 1. 注册 onAuthStateChange 监听（必须在 getSession 之前注册）=====
-            supabaseClient.auth.onAuthStateChange(function (event, session) {
-                console.log('[Auth] onAuthStateChange 事件:', event);
+            // 🔧 FIX 3: 延长等待时间，使用渐进式重试
+            let retryCount = 0;
+            const maxRetries = 10;  // 最多等 5 秒（500ms × 10）
 
-                if ((event === 'SIGNED_IN' || event === 'INITIAL_SESSION' || event === 'TOKEN_REFRESHED') && session) {
-                    if (applySession(session)) {
-                        hideOverlay();
-                        cleanUrlHash();
+            async function checkSession() {
+                retryCount++;
+                console.log('[Auth] 第 ' + retryCount + ' 次检查 session...');
 
-                        // 如果有昵称，填入角色创建页
-                        if (gameUser && gameUser.nickname) {
-                            var nameInput = document.getElementById('authNickname');
-                            if (nameInput && !nameInput.value) nameInput.value = gameUser.nickname;
-                            var realNameInput = document.getElementById('realName');
-                            if (realNameInput && !realNameInput.value) realNameInput.value = gameUser.nickname;
-                        }
-                    }
-                } else if (event === 'SIGNED_OUT') {
-                    gameToken = '';
-                    gameUser = null;
-                    localStorage.removeItem('token');
-                    localStorage.removeItem('user');
-                    showOverlay();
-                    console.log('[Auth] 用户已登出');
-                }
-            });
-
-            // ===== 2. 主动检查一次 session（处理页面刷新后恢复会话）=====
-            // 延迟一小段时间，给 Supabase SDK 足够时间从 URL hash 中解析 session
-            setTimeout(async function () {
                 try {
                     const { data, error } = await supabaseClient.auth.getSession();
+                    
                     if (error) {
                         console.error('[Auth] getSession 错误:', error);
-                        showOverlay();
+                        // 如果是 OAuth 回调但出错了，显示错误
+                        if (inCallback) {
+                            if (errorEl) errorEl.textContent = 'OAuth 登录处理失败: ' + 
+                                (error.message || String(error));
+                            resetDiscordButton();
+                            enableLoginButtons();
+                        }
                         return;
                     }
+
                     if (data.session && data.session.user) {
-                        console.log('[Auth] getSession 发现有效会话');
-                        if (applySession(data.session)) {
-                            hideOverlay();
-                            cleanUrlHash();
-                        }
-                    } else {
-                        // 没有 Supabase 会话，检查是否有旧的 localStorage 登录信息
+                        console.log('[Auth] ✅ getSession 发现有效会话！');
+                        applyAndHide(data.session);
+                        return;
+                    }
+
+                    // 还没拿到 session
+                    if (inCallback && retryCount < maxRetries) {
+                        // OAuth 回调中，继续等待
+                        console.log('[Auth] OAuth 回调处理中，继续等待...');
+                        setTimeout(checkSession, 500);
+                        return;
+                    }
+
+                    // 最终确认无会话
+                    if (!_authSessionResolved) {
+                        // 检查 localStorage 兜底
                         if (gameToken && gameUser) {
                             console.log('[Auth] 使用 localStorage 中的旧会话');
-                            hideOverlay();
+                            overlay.classList.add('hidden');
                         } else {
-                            console.log('[Auth] 无有效会话，显示登录界面');
-                            showOverlay();
+                            console.log('[Auth] 确认无有效会话，显示登录界面');
+                            overlay.classList.remove('hidden');
+                            resetDiscordButton();
+                            enableLoginButtons();
                         }
                     }
                 } catch (e) {
                     console.error('[Auth] session 检查异常:', e);
-                    // 兜底：如果 localStorage 有数据也算登录
                     if (gameToken && gameUser) {
-                        hideOverlay();
+                        overlay.classList.add('hidden');
                     } else {
-                        showOverlay();
+                        overlay.classList.remove('hidden');
+                        resetDiscordButton();
+                        enableLoginButtons();
                     }
                 }
-            }, 300);
+            }
 
-            // ===== 3. 原有邮箱登录/注册逻辑 =====
+            function resetDiscordButton() {
+                const discordBtn = document.getElementById('authDiscordBtn');
+                if (discordBtn) {
+                    discordBtn.classList.remove('loading');
+                    discordBtn.innerHTML = '<svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor" style="margin-right:8px;flex-shrink:0;"><path d="M20.317 4.37a19.791 19.791 0 0 0-4.885-1.515.074.074 0 0 0-.079.037c-.21.375-.444.864-.608 1.25a18.27 18.27 0 0 0-5.487 0 12.64 12.64 0 0 0-.617-1.25.077.077 0 0 0-.079-.037A19.736 19.736 0 0 0 3.677 4.37a.07.07 0 0 0-.032.027C.533 9.046-.32 13.58.099 18.057a.082.082 0 0 0 .031.057 19.9 19.9 0 0 0 5.993 3.03.078.078 0 0 0 .084-.028c.462-.63.874-1.295 1.226-1.994a.076.076 0 0 0-.041-.106 13.107 13.107 0 0 1-1.872-.892.077.077 0 0 1-.008-.128 10.2 10.2 0 0 0 .372-.292.074.074 0 0 1 .077-.01c3.928 1.793 8.18 1.793 12.062 0a.074.074 0 0 1 .078.01c.12.098.246.198.373.292a.077.077 0 0 1-.006.127 12.299 12.299 0 0 1-1.873.892.077.077 0 0 0-.041.107c.36.698.772 1.362 1.225 1.993a.076.076 0 0 0 .084.028 19.839 19.839 0 0 0 6.002-3.03.077.077 0 0 0 .032-.054c.5-5.177-.838-9.674-3.549-13.66a.061.061 0 0 0-.031-.03z"/></svg> 使用 Discord 登录';
+                }
+            }
+
+            function enableLoginButtons() {
+                if (loginBtn) loginBtn.disabled = false;
+                if (registerBtn) loginBtn.disabled = false;
+            }
+
+            // 🔧 FIX 4: 根据是否在 OAuth 回调中决定首次检查时机
+            setTimeout(checkSession, inCallback ? 800 : 300);
+
+            // 绑定邮箱登录/注册
+            bindEmailLoginButtons();
+
+            function bindEmailLoginButtons() {
+                // 避免重复绑定
+                if (loginBtn._bound) return;
+                loginBtn._bound = true;
+
+                loginBtn.addEventListener('click', handleLogin);
+                registerBtn.addEventListener('click', handleRegister);
+                passwordInput.addEventListener('keydown', function(e) {
+                    if (e.key === 'Enter') { e.preventDefault(); handleLogin(); }
+                });
+            }
+
             async function handleRegister() {
                 const email = emailInput.value.trim();
                 const password = passwordInput.value.trim();
                 const nickname = (nicknameInput.value || '').trim();
-
                 if (!email || !password) {
                     errorEl.textContent = '邮箱和密码不能为空';
                     return;
                 }
                 errorEl.textContent = '';
                 setAuthButtonLoading(registerBtn, true);
-
                 try {
                     const res = await fetch(API_BASE + '/api/register', {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify({ email, password, nickname })
                     });
-                    const data = await res.json().catch(function () { return {}; });
+                    const data = await res.json().catch(function() { return {}; });
                     if (!res.ok) {
                         errorEl.textContent = data.error || '注册失败，请稍后重试';
                         return;
@@ -4039,21 +4149,19 @@ ${WORLD_LORE_SUMMARY}`;
             async function handleLogin() {
                 const email = emailInput.value.trim();
                 const password = passwordInput.value.trim();
-
                 if (!email || !password) {
                     errorEl.textContent = '邮箱和密码不能为空';
                     return;
                 }
                 errorEl.textContent = '';
                 setAuthButtonLoading(loginBtn, true);
-
                 try {
                     const res = await fetch(API_BASE + '/api/login', {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify({ email, password })
                     });
-                    const data = await res.json().catch(function () { return {}; });
+                    const data = await res.json().catch(function() { return {}; });
                     if (!res.ok) {
                         errorEl.textContent = data.error || '登录失败，请稍后重试';
                         return;
@@ -4066,19 +4174,13 @@ ${WORLD_LORE_SUMMARY}`;
                     }
                     localStorage.setItem('token', gameToken);
                     localStorage.setItem('user', JSON.stringify(gameUser));
-                    hideOverlay();
+                    overlay.classList.add('hidden');
                 } catch (e) {
                     errorEl.textContent = '网络错误，请稍后重试';
                 } finally {
                     setAuthButtonLoading(loginBtn, false);
                 }
             }
-
-            loginBtn.addEventListener('click', handleLogin);
-            registerBtn.addEventListener('click', handleRegister);
-            passwordInput.addEventListener('keydown', function (e) {
-                if (e.key === 'Enter') { e.preventDefault(); handleLogin(); }
-            });
         }
 
         // ---------- 背景粒子（轻量版）
