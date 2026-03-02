@@ -1,0 +1,1264 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Azure Legend - AI西幻RPG</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        :root {
+            --bg-primary: #0a0a0f;
+            --bg-secondary: #1a1a2e;
+            --bg-tertiary: #16213e;
+            --accent-gold: #d4af37;
+            --accent-cyan: #00d4ff;
+            --accent-red: #ff4444;
+            --text-primary: #e0e0e0;
+            --text-secondary: #888;
+            --border-color: #2a2a3e;
+            --magic-glow: 0 0 20px rgba(212, 175, 55, 0.3);
+        }
+
+        @import url('https://fonts.googleapis.com/css2?family=Cinzel:wght@400;700&family=Noto+Serif+SC:wght@400;700&display=swap');
+
+        body {
+            font-family: 'Noto Serif SC', serif;
+            background: var(--bg-primary);
+            color: var(--text-primary);
+            overflow: hidden;
+            height: 100vh;
+            background-image: 
+                radial-gradient(circle at 20% 50%, rgba(120, 60, 180, 0.15) 0%, transparent 50%),
+                radial-gradient(circle at 80% 80%, rgba(0, 212, 255, 0.1) 0%, transparent 50%);
+        }
+
+        /* 背景纹理 */
+        .bg-texture {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            opacity: 0.03;
+            pointer-events: none;
+            background-image: url("data:image/svg+xml,%3Csvg width='60' height='60' viewBox='0 0 60 60' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='none' fill-rule='evenodd'%3E%3Cg fill='%23d4af37' fill-opacity='1'%3E%3Cpath d='M36 34v-4h-2v4h-4v2h4v4h2v-4h4v-2h-4zm0-30V0h-2v4h-4v2h4v4h2V6h4V4h-4zM6 34v-4H4v4H0v2h4v4h2v-4h4v-2H6zM6 4V0H4v4H0v2h4v4h2V6h4V4H6z'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E");
+            z-index: 0;
+        }
+
+        /* 主容器 */
+        .game-container {
+            display: grid;
+            grid-template-columns: 280px 1fr 300px;
+            grid-template-rows: 60px 1fr 120px;
+            height: 100vh;
+            gap: 1px;
+            background: var(--border-color);
+            position: relative;
+            z-index: 1;
+        }
+
+        /* 标题栏 */
+        .header {
+            grid-column: 1 / -1;
+            background: linear-gradient(135deg, var(--bg-secondary) 0%, var(--bg-tertiary) 100%);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 0 24px;
+            border-bottom: 2px solid var(--accent-gold);
+            box-shadow: 0 2px 20px rgba(0,0,0,0.5);
+        }
+
+        .game-title {
+            font-family: 'Cinzel', serif;
+            font-size: 24px;
+            color: var(--accent-gold);
+            text-shadow: 0 0 10px rgba(212, 175, 55, 0.5);
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .rune-icon {
+            width: 32px;
+            height: 32px;
+            border: 2px solid var(--accent-gold);
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            animation: pulse 3s infinite;
+        }
+
+        @keyframes pulse {
+            0%, 100% { box-shadow: 0 0 5px var(--accent-gold); }
+            50% { box-shadow: 0 0 20px var(--accent-gold); }
+        }
+
+        /* 左侧面板 - 角色状态 */
+        .character-panel {
+            background: var(--bg-secondary);
+            padding: 20px;
+            overflow-y: auto;
+            border-right: 1px solid var(--border-color);
+        }
+
+        .panel-header {
+            font-family: 'Cinzel', serif;
+            color: var(--accent-gold);
+            border-bottom: 1px solid var(--border-color);
+            padding-bottom: 10px;
+            margin-bottom: 20px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+
+        .character-avatar {
+            width: 100%;
+            height: 200px;
+            background: linear-gradient(135deg, #2a2a3e 0%, #1a1a2e 100%);
+            border: 2px solid var(--accent-gold);
+            border-radius: 8px;
+            margin-bottom: 20px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 80px;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .character-avatar::before {
+            content: '';
+            position: absolute;
+            top: -50%;
+            left: -50%;
+            width: 200%;
+            height: 200%;
+            background: conic-gradient(from 0deg, transparent, var(--accent-gold), transparent);
+            animation: rotate 4s linear infinite;
+            opacity: 0.1;
+        }
+
+        @keyframes rotate {
+            100% { transform: rotate(360deg); }
+        }
+
+        .stat-row {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 12px;
+            padding: 8px;
+            background: rgba(0,0,0,0.2);
+            border-radius: 4px;
+            border-left: 3px solid var(--accent-cyan);
+        }
+
+        .stat-label {
+            color: var(--text-secondary);
+            font-size: 14px;
+        }
+
+        .stat-value {
+            color: var(--accent-cyan);
+            font-weight: bold;
+        }
+
+        .hp-bar, .mp-bar {
+            width: 100%;
+            height: 20px;
+            background: rgba(0,0,0,0.5);
+            border-radius: 10px;
+            overflow: hidden;
+            margin: 10px 0;
+            border: 1px solid var(--border-color);
+            position: relative;
+        }
+
+        .hp-fill {
+            height: 100%;
+            background: linear-gradient(90deg, #ff4444, #ff6666);
+            width: 85%;
+            transition: width 0.5s ease;
+            box-shadow: 0 0 10px rgba(255, 68, 68, 0.5);
+        }
+
+        .mp-fill {
+            height: 100%;
+            background: linear-gradient(90deg, #0088ff, #00d4ff);
+            width: 60%;
+            transition: width 0.5s ease;
+            box-shadow: 0 0 10px rgba(0, 212, 255, 0.5);
+        }
+
+        .bar-text {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            font-size: 12px;
+            font-weight: bold;
+            text-shadow: 0 0 4px rgba(0,0,0,0.8);
+        }
+
+        /* 中央主区域 */
+        .main-content {
+            background: var(--bg-primary);
+            display: flex;
+            flex-direction: column;
+            position: relative;
+        }
+
+        .chat-area {
+            flex: 1;
+            overflow-y: auto;
+            padding: 20px;
+            scroll-behavior: smooth;
+        }
+
+        .message {
+            margin-bottom: 20px;
+            animation: fadeIn 0.3s ease;
+            max-width: 80%;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        .message-system {
+            text-align: center;
+            color: var(--accent-gold);
+            font-style: italic;
+            margin: 20px 0;
+            padding: 10px;
+            border-top: 1px solid rgba(212, 175, 55, 0.3);
+            border-bottom: 1px solid rgba(212, 175, 55, 0.3);
+        }
+
+        .message-user {
+            margin-left: auto;
+            background: linear-gradient(135deg, var(--bg-tertiary) 0%, var(--bg-secondary) 100%);
+            border: 1px solid var(--accent-cyan);
+            border-radius: 16px 16px 0 16px;
+            padding: 15px;
+            box-shadow: 0 4px 15px rgba(0, 212, 255, 0.1);
+        }
+
+        .message-ai {
+            margin-right: auto;
+            background: linear-gradient(135deg, #2a1f1f 0%, var(--bg-secondary) 100%);
+            border: 1px solid var(--accent-gold);
+            border-radius: 16px 16px 16px 0;
+            padding: 15px;
+            box-shadow: var(--magic-glow);
+        }
+
+        .message-header {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            margin-bottom: 8px;
+            font-family: 'Cinzel', serif;
+            font-size: 14px;
+        }
+
+        .message-user .message-header {
+            color: var(--accent-cyan);
+        }
+
+        .message-ai .message-header {
+            color: var(--accent-gold);
+        }
+
+        .message-content {
+            line-height: 1.8;
+            font-size: 15px;
+        }
+
+        .typing-indicator {
+            display: none;
+            padding: 15px;
+            background: var(--bg-secondary);
+            border-radius: 16px;
+            border: 1px solid var(--accent-gold);
+            margin-bottom: 20px;
+            width: fit-content;
+        }
+
+        .typing-indicator.active {
+            display: flex;
+            gap: 4px;
+        }
+
+        .dot {
+            width: 8px;
+            height: 8px;
+            background: var(--accent-gold);
+            border-radius: 50%;
+            animation: bounce 1.4s infinite ease-in-out;
+        }
+
+        .dot:nth-child(1) { animation-delay: 0s; }
+        .dot:nth-child(2) { animation-delay: 0.2s; }
+        .dot:nth-child(3) { animation-delay: 0.4s; }
+
+        @keyframes bounce {
+            0%, 80%, 100% { transform: translateY(0); }
+            40% { transform: translateY(-10px); }
+        }
+
+        /* 输入区域 */
+        .input-area {
+            background: var(--bg-secondary);
+            border-top: 2px solid var(--border-color);
+            padding: 20px;
+            display: flex;
+            gap: 10px;
+            align-items: flex-end;
+        }
+
+        .input-wrapper {
+            flex: 1;
+            position: relative;
+        }
+
+        .chat-input {
+            width: 100%;
+            background: var(--bg-primary);
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            padding: 12px 16px;
+            color: var(--text-primary);
+            font-family: inherit;
+            font-size: 15px;
+            resize: none;
+            outline: none;
+            transition: all 0.3s;
+            min-height: 44px;
+            max-height: 120px;
+        }
+
+        .chat-input:focus {
+            border-color: var(--accent-gold);
+            box-shadow: 0 0 0 2px rgba(212, 175, 55, 0.2);
+        }
+
+        .action-buttons {
+            display: flex;
+            gap: 8px;
+            margin-bottom: 8px;
+        }
+
+        .action-btn {
+            padding: 6px 12px;
+            background: rgba(212, 175, 55, 0.1);
+            border: 1px solid var(--accent-gold);
+            color: var(--accent-gold);
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 12px;
+            transition: all 0.2s;
+            font-family: 'Cinzel', serif;
+        }
+
+        .action-btn:hover {
+            background: var(--accent-gold);
+            color: var(--bg-primary);
+        }
+
+        .send-btn {
+            padding: 12px 24px;
+            background: linear-gradient(135deg, var(--accent-gold) 0%, #b8941f 100%);
+            border: none;
+            border-radius: 8px;
+            color: var(--bg-primary);
+            font-weight: bold;
+            cursor: pointer;
+            transition: all 0.2s;
+            font-family: 'Cinzel', serif;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+        .send-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 20px rgba(212, 175, 55, 0.4);
+        }
+
+        .send-btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        /* 右侧面板 - 设置 */
+        .settings-panel {
+            background: var(--bg-secondary);
+            border-left: 1px solid var(--border-color);
+            display: flex;
+            flex-direction: column;
+        }
+
+        .settings-tabs {
+            display: flex;
+            border-bottom: 1px solid var(--border-color);
+        }
+
+        .tab-btn {
+            flex: 1;
+            padding: 15px;
+            background: transparent;
+            border: none;
+            color: var(--text-secondary);
+            cursor: pointer;
+            font-family: 'Cinzel', serif;
+            transition: all 0.2s;
+            border-bottom: 2px solid transparent;
+        }
+
+        .tab-btn.active {
+            color: var(--accent-gold);
+            border-bottom-color: var(--accent-gold);
+            background: rgba(212, 175, 55, 0.05);
+        }
+
+        .tab-content {
+            flex: 1;
+            overflow-y: auto;
+            padding: 20px;
+            display: none;
+        }
+
+        .tab-content.active {
+            display: block;
+        }
+
+        .form-group {
+            margin-bottom: 20px;
+        }
+
+        .form-label {
+            display: block;
+            color: var(--accent-gold);
+            margin-bottom: 8px;
+            font-size: 13px;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+        .form-input, .form-select {
+            width: 100%;
+            padding: 10px;
+            background: var(--bg-primary);
+            border: 1px solid var(--border-color);
+            border-radius: 6px;
+            color: var(--text-primary);
+            font-family: inherit;
+            outline: none;
+            transition: border-color 0.2s;
+        }
+
+        .form-input:focus, .form-select:focus {
+            border-color: var(--accent-gold);
+        }
+
+        .save-btn {
+            width: 100%;
+            padding: 12px;
+            background: var(--accent-cyan);
+            border: none;
+            border-radius: 6px;
+            color: var(--bg-primary);
+            font-weight: bold;
+            cursor: pointer;
+            margin-top: 10px;
+            font-family: 'Cinzel', serif;
+        }
+
+        .inventory-grid {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 8px;
+            margin-top: 10px;
+        }
+
+        .inventory-slot {
+            aspect-ratio: 1;
+            background: rgba(0,0,0,0.3);
+            border: 1px solid var(--border-color);
+            border-radius: 4px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 20px;
+            cursor: pointer;
+            transition: all 0.2s;
+            position: relative;
+        }
+
+        .inventory-slot:hover {
+            border-color: var(--accent-gold);
+            transform: scale(1.05);
+        }
+
+        .inventory-slot .item-count {
+            position: absolute;
+            bottom: 2px;
+            right: 4px;
+            font-size: 10px;
+            color: var(--accent-gold);
+        }
+
+        /* 滚动条样式 */
+        ::-webkit-scrollbar {
+            width: 8px;
+            height: 8px;
+        }
+
+        ::-webkit-scrollbar-track {
+            background: var(--bg-primary);
+        }
+
+        ::-webkit-scrollbar-thumb {
+            background: var(--accent-gold);
+            border-radius: 4px;
+        }
+
+        ::-webkit-scrollbar-thumb:hover {
+            background: #e5c158;
+        }
+
+        /* 模态框 */
+        .modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0,0,0,0.8);
+            z-index: 1000;
+            align-items: center;
+            justify-content: center;
+            backdrop-filter: blur(5px);
+        }
+
+        .modal.active {
+            display: flex;
+        }
+
+        .modal-content {
+            background: linear-gradient(135deg, var(--bg-secondary) 0%, var(--bg-tertiary) 100%);
+            border: 2px solid var(--accent-gold);
+            border-radius: 12px;
+            padding: 30px;
+            max-width: 500px;
+            width: 90%;
+            box-shadow: 0 0 40px rgba(212, 175, 55, 0.3);
+        }
+
+        .dice-roll {
+            display: inline-flex;
+            align-items: center;
+            gap: 5px;
+            padding: 2px 8px;
+            background: rgba(212, 175, 55, 0.2);
+            border: 1px solid var(--accent-gold);
+            border-radius: 4px;
+            color: var(--accent-gold);
+            font-weight: bold;
+            margin: 0 2px;
+        }
+
+        /* 响应式 */
+        @media (max-width: 1200px) {
+            .game-container {
+                grid-template-columns: 240px 1fr 280px;
+            }
+        }
+
+        @media (max-width: 900px) {
+            .game-container {
+                grid-template-columns: 1fr;
+                grid-template-rows: auto;
+            }
+            .character-panel, .settings-panel {
+                display: none;
+            }
+            .mobile-toggle {
+                display: flex !important;
+            }
+        }
+
+        .mobile-toggle {
+            display: none;
+            position: fixed;
+            bottom: 140px;
+            right: 20px;
+            width: 50px;
+            height: 50px;
+            background: var(--accent-gold);
+            border-radius: 50%;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            z-index: 100;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.5);
+        }
+    </style>
+</head>
+<body>
+    <div class="bg-texture"></div>
+    
+    <div class="game-container">
+        <!-- 顶部标题栏 -->
+        <header class="header">
+            <div class="game-title">
+                <div class="rune-icon">⚔</div>
+                <span>Azure Legend</span>
+                <span style="font-size: 12px; color: var(--text-secondary); margin-left: 10px;">v1.0</span>
+            </div>
+            <div style="display: flex; gap: 15px; align-items: center;">
+                <span style="color: var(--text-secondary); font-size: 14px;">系统状态: <span style="color: #0f0;">在线</span></span>
+                <button onclick="toggleFullscreen()" style="background: transparent; border: 1px solid var(--accent-gold); color: var(--accent-gold); padding: 6px 12px; border-radius: 4px; cursor: pointer; font-family: inherit;">
+                    ⛶ 全屏
+                </button>
+            </div>
+        </header>
+
+        <!-- 左侧角色面板 -->
+        <aside class="character-panel">
+            <div class="panel-header">
+                <span>英雄档案</span>
+                <span style="font-size: 12px; color: var(--accent-cyan);">Lv.<span id="level">12</span></span>
+            </div>
+            
+            <div class="character-avatar">
+                🧙‍♂️
+            </div>
+
+            <div style="text-align: center; margin-bottom: 20px; font-family: 'Cinzel', serif; color: var(--accent-gold); font-size: 18px;">
+                <span id="char-name">冒险者</span>
+            </div>
+
+            <div class="hp-bar">
+                <div class="hp-fill" id="hp-bar"></div>
+                <span class="bar-text">HP: <span id="hp-value">85</span>/100</span>
+            </div>
+            
+            <div class="mp-bar">
+                <div class="mp-fill" id="mp-bar"></div>
+                <span class="bar-text">MP: <span id="mp-value">60</span>/100</span>
+            </div>
+
+            <div style="margin-top: 20px;">
+                <div class="panel-header" style="margin-bottom: 10px;">
+                    <span>属性</span>
+                </div>
+                <div class="stat-row">
+                    <span class="stat-label">力量 (STR)</span>
+                    <span class="stat-value">14 (+2)</span>
+                </div>
+                <div class="stat-row">
+                    <span class="stat-label">敏捷 (DEX)</span>
+                    <span class="stat-value">16 (+3)</span>
+                </div>
+                <div class="stat-row">
+                    <span class="stat-label">智力 (INT)</span>
+                    <span class="stat-value">18 (+4)</span>
+                </div>
+                <div class="stat-row">
+                    <span class="stat-label">体质 (CON)</span>
+                    <span class="stat-value">12 (+1)</span>
+                </div>
+                <div class="stat-row">
+                    <span class="stat-label">感知 (WIS)</span>
+                    <span class="stat-value">15 (+2)</span>
+                </div>
+                <div class="stat-row">
+                    <span class="stat-label">魅力 (CHA)</span>
+                    <span class="stat-value">13 (+1)</span>
+                </div>
+            </div>
+
+            <div style="margin-top: 20px;">
+                <div class="panel-header" style="margin-bottom: 10px;">
+                    <span>状态效果</span>
+                </div>
+                <div style="display: flex; flex-wrap: wrap; gap: 5px;">
+                    <span style="padding: 4px 8px; background: rgba(0, 212, 255, 0.2); border: 1px solid var(--accent-cyan); border-radius: 4px; font-size: 12px; color: var(--accent-cyan);">🛡 护盾</span>
+                    <span style="padding: 4px 8px; background: rgba(255, 68, 68, 0.2); border: 1px solid var(--accent-red); border-radius: 4px; font-size: 12px; color: var(--accent-red);">⚔ 热血</span>
+                </div>
+            </div>
+        </aside>
+
+        <!-- 中央聊天区域 -->
+        <main class="main-content">
+            <div class="chat-area" id="chatArea">
+                <div class="message-system">
+                    🎲 命运之轮开始转动... 你站在艾尔文森林的边缘，前方是未知的冒险。
+                </div>
+                
+                <div class="message message-ai">
+                    <div class="message-header">
+                        <span>🔮 守秘人 (AI)</span>
+                        <span style="color: var(--text-secondary); font-size: 12px;">刚刚</span>
+                    </div>
+                    <div class="message-content">
+                        欢迎来到 Azure Legend，冒险者。我是你的守秘人，将引导你穿越这个充满魔法与剑的奇幻世界。<br><br>
+                        你目前位于<strong>银月城</strong>的郊外，微风带来远方的龙吟。你的行囊中有：长剑×1、治疗药水×3、神秘卷轴×1。<br><br>
+                        你可以：
+                        <ul style="margin-left: 20px; margin-top: 8px;">
+                            <li>探索附近的<b>古老遗迹</b></li>
+                            <li>前往<b>冒险者公会</b>接受任务</li>
+                            <li>在<b>营地</b>休息恢复体力</li>
+                            <li>与NPC对话获取情报</li>
+                        </ul>
+                        <br>
+                        <span style="color: var(--accent-gold);">你想如何行动？</span>
+                    </div>
+                </div>
+            </div>
+
+            <div class="typing-indicator" id="typingIndicator">
+                <div class="dot"></div>
+                <div class="dot"></div>
+                <div class="dot"></div>
+            </div>
+
+            <div class="input-area">
+                <div class="input-wrapper">
+                    <div class="action-buttons">
+                        <button class="action-btn" onclick="rollDice(20)" title="投掷D20">🎲 D20</button>
+                        <button class="action-btn" onclick="useSkill('侦查')" title="侦查">👁 侦查</button>
+                        <button class="action-btn" onclick="useSkill('说服')" title="说服">💬 说服</button>
+                        <button class="action-btn" onclick="openInventory()" title="背包">🎒 背包</button>
+                        <button class="action-btn" onclick="rest()" title="休息">⛺ 休息</button>
+                    </div>
+                    <textarea class="chat-input" id="userInput" placeholder="输入你的行动... (例如：我想检查那扇古老的门，或者：攻击面前的哥布林)" rows="1"></textarea>
+                </div>
+                <button class="send-btn" onclick="sendMessage()" id="sendBtn">
+                    发送
+                </button>
+            </div>
+        </main>
+
+        <!-- 右侧设置面板 -->
+        <aside class="settings-panel">
+            <div class="settings-tabs">
+                <button class="tab-btn active" onclick="switchTab('api')">⚙ 配置</button>
+                <button class="tab-btn" onclick="switchTab('game')">🎮 游戏</button>
+                <button class="tab-btn" onclick="switchTab('log')">📜 日志</button>
+            </div>
+
+            <div id="tab-api" class="tab-content active">
+                <div class="form-group">
+                    <label class="form-label">API URL</label>
+                    <input type="text" class="form-input" id="apiUrl" placeholder="https://api.openai.com/v1/chat/completions" value="">
+                </div>
+                
+                <div class="form-group">
+                    <label class="form-label">API Key</label>
+                    <input type="password" class="form-input" id="apiKey" placeholder="sk-..." value="">
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label">模型选择</label>
+                    <select class="form-select" id="modelSelect">
+                        <option value="gpt-4">GPT-4 (推荐)</option>
+                        <option value="gpt-4-turbo">GPT-4 Turbo</option>
+                        <option value="gpt-3.5-turbo">GPT-3.5 Turbo</option>
+                        <option value="claude-3-opus">Claude 3 Opus</option>
+                        <option value="claude-3-sonnet">Claude 3 Sonnet</option>
+                        <option value="local">本地模型 (LM Studio)</option>
+                    </select>
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label">温度 (创造性)</label>
+                    <input type="range" class="form-input" id="temperature" min="0" max="2" step="0.1" value="0.8">
+                    <div style="display: flex; justify-content: space-between; font-size: 12px; color: var(--text-secondary); margin-top: 5px;">
+                        <span>精确</span>
+                        <span id="tempValue">0.8</span>
+                        <span>随机</span>
+                    </div>
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label">最大令牌数</label>
+                    <input type="number" class="form-input" id="maxTokens" value="2000" min="100" max="4000" step="100">
+                </div>
+
+                <button class="save-btn" onclick="saveSettings()">💾 保存配置</button>
+                
+                <div style="margin-top: 20px; padding: 15px; background: rgba(0,0,0,0.3); border-radius: 8px; border: 1px solid var(--border-color);">
+                    <div style="color: var(--accent-gold); font-size: 12px; margin-bottom: 8px; text-transform: uppercase;">📋 使用说明</div>
+                    <div style="font-size: 13px; color: var(--text-secondary); line-height: 1.6;">
+                        • 支持OpenAI、Claude及兼容OpenAI格式的API<br>
+                        • 本地模型请填写 http://localhost:1234/v1/chat/completions<br>
+                        • 配置将自动保存到浏览器本地存储
+                    </div>
+                </div>
+            </div>
+
+            <div id="tab-game" class="tab-content">
+                <div class="form-group">
+                    <label class="form-label">角色名称</label>
+                    <input type="text" class="form-input" id="charNameInput" value="冒险者">
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label">职业</label>
+                    <select class="form-select" id="classSelect">
+                        <option value="warrior">⚔ 战士</option>
+                        <option value="mage">🔮 法师</option>
+                        <option value="rogue">🗡 游侠</option>
+                        <option value="cleric">✨ 牧师</option>
+                    </select>
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label">游戏风格</label>
+                    <select class="form-select" id="styleSelect">
+                        <option value="balanced">⚖ 平衡</option>
+                        <option value="story">📖 剧情向</option>
+                        <option value="combat">⚔ 战斗向</option>
+                        <option value="hardcore">☠ 硬核</option>
+                    </select>
+                </div>
+
+                <div class="panel-header" style="margin-top: 20px;">
+                    <span>快捷背包</span>
+                </div>
+                <div class="inventory-grid" id="quickInventory">
+                    <div class="inventory-slot" title="治疗药水">🧪<span class="item-count">×3</span></div>
+                    <div class="inventory-slot" title="长剑">⚔</div>
+                    <div class="inventory-slot" title="神秘卷轴">📜</div>
+                    <div class="inventory-slot" title="金币袋">💰<span class="item-count">×50</span></div>
+                    <div class="inventory-slot" title="火把">🔥</div>
+                    <div class="inventory-slot" title="干粮">🍞<span class="item-count">×5</span></div>
+                    <div class="inventory-slot" title="空"></div>
+                    <div class="inventory-slot" title="空"></div>
+                </div>
+
+                <button class="save-btn" onclick="saveGameSettings()" style="margin-top: 20px;">🎮 应用游戏设置</button>
+            </div>
+
+            <div id="tab-log" class="tab-content">
+                <div style="font-family: monospace; font-size: 12px; color: var(--text-secondary); line-height: 1.6;">
+                    <div style="color: var(--accent-gold); margin-bottom: 10px;">[系统] 游戏初始化完成</div>
+                    <div style="margin-bottom: 5px;">[14:32:01] 连接到服务器...</div>
+                    <div style="margin-bottom: 5px; color: #0f0;">[14:32:02] 连接成功</div>
+                    <div style="margin-bottom: 5px;">[14:32:05] 加载角色数据...</div>
+                    <div style="margin-bottom: 5px; color: var(--accent-cyan);">[14:32:06] 欢迎回来，冒险者</div>
+                    <div style="margin-bottom: 5px;" id="logContainer">
+                        <!-- 动态日志 -->
+                    </div>
+                </div>
+                <button class="save-btn" onclick="clearLog()" style="background: var(--accent-red); margin-top: 10px;">🗑 清空日志</button>
+            </div>
+        </aside>
+
+        <!-- 输入区域移动到这里是为了布局，实际上已经在main-content里 -->
+    </div>
+
+    <!-- 移动设备切换按钮 -->
+    <div class="mobile-toggle" onclick="toggleMobileMenu()">☰</div>
+
+    <!-- 骰子结果模态框 -->
+    <div class="modal" id="diceModal">
+        <div class="modal-content" style="text-align: center;">
+            <h2 style="color: var(--accent-gold); margin-bottom: 20px; font-family: 'Cinzel', serif;">🎲 命运裁决</h2>
+            <div style="font-size: 72px; margin: 30px 0;" id="diceResult">20</div>
+            <div style="color: var(--text-secondary); margin-bottom: 20px;" id="diceText">大成功！命运的眷顾降临于你。</div>
+            <button class="send-btn" onclick="closeDiceModal()">接受命运</button>
+        </div>
+    </div>
+
+    <script>
+        // 状态和配置
+        let gameState = {
+            hp: 85,
+            maxHp: 100,
+            mp: 60,
+            maxMp: 100,
+            level: 12,
+            inventory: [
+                {name: '治疗药水', count: 3, icon: '🧪'},
+                {name: '长剑', count: 1, icon: '⚔'},
+                {name: '神秘卷轴', count: 1, icon: '📜'},
+                {name: '金币', count: 50, icon: '💰'}
+            ]
+        };
+
+        let apiConfig = {
+            url: localStorage.getItem('apiUrl') || '',
+            key: localStorage.getItem('apiKey') || '',
+            model: localStorage.getItem('model') || 'gpt-4',
+            temperature: parseFloat(localStorage.getItem('temperature')) || 0.8,
+            maxTokens: parseInt(localStorage.getItem('maxTokens')) || 2000
+        };
+
+        // 初始化
+        document.addEventListener('DOMContentLoaded', () => {
+            loadSettings();
+            
+            // 自动调整输入框高度
+            const textarea = document.getElementById('userInput');
+            textarea.addEventListener('input', function() {
+                this.style.height = 'auto';
+                this.style.height = Math.min(this.scrollHeight, 120) + 'px';
+            });
+
+            // 回车发送 (Shift+Enter换行)
+            textarea.addEventListener('keydown', function(e) {
+                if (e.key === 'Enter' && !e.shiftKey) {
+                    e.preventDefault();
+                    sendMessage();
+                }
+            });
+
+            // 温度滑块实时显示
+            document.getElementById('temperature').addEventListener('input', function() {
+                document.getElementById('tempValue').textContent = this.value;
+            });
+        });
+
+        // 标签切换
+        function switchTab(tabName) {
+            document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
+            document.querySelectorAll('.tab-content').forEach(content => content.classList.remove('active'));
+            
+            event.target.classList.add('active');
+            document.getElementById('tab-' + tabName).classList.add('active');
+        }
+
+        // 发送消息
+        async function sendMessage() {
+            const input = document.getElementById('userInput');
+            const message = input.value.trim();
+            if (!message) return;
+
+            // 添加用户消息
+            addMessage(message, 'user');
+            input.value = '';
+            input.style.height = 'auto';
+
+            // 显示输入中
+            document.getElementById('typingIndicator').classList.add('active');
+            document.getElementById('sendBtn').disabled = true;
+
+            // 消耗一点MP (模拟)
+            if (gameState.mp > 0) {
+                updateMP(Math.max(0, gameState.mp - 1));
+            }
+
+            try {
+                // 这里调用实际的AI API
+                const response = await callAI(message);
+                addMessage(response, 'ai');
+            } catch (error) {
+                addMessage(`⚠ 连接错误: ${error.message}\n\n请检查API配置是否正确。`, 'ai');
+            } finally {
+                document.getElementById('typingIndicator').classList.remove('active');
+                document.getElementById('sendBtn').disabled = false;
+            }
+        }
+
+        // 模拟AI调用 (实际使用时替换为真实API)
+        async function callAI(message) {
+            // 如果没有配置API，使用模拟回复
+            if (!apiConfig.url || !apiConfig.key) {
+                await new Promise(r => setTimeout(r, 1500)); // 模拟延迟
+                return generateMockResponse(message);
+            }
+
+            // 真实API调用
+            const response = await fetch(apiConfig.url, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${apiConfig.key}`
+                },
+                body: JSON.stringify({
+                    model: apiConfig.model,
+                    messages: [
+                        {
+                            role: 'system',
+                            content: `你是一个西幻TRPG游戏的守秘人(DM)。当前游戏设定：高魔中世纪世界，玩家是${document.getElementById('charNameInput').value}，等级${gameState.level}的冒险者。请根据玩家的行动进行富有想象力的描述，包含场景描写、NPC对话和必要的骰子检定 requests。保持神秘、冒险的氛围，使用中文。`
+                        },
+                        {
+                            role: 'user',
+                            content: message
+                        }
+                    ],
+                    temperature: apiConfig.temperature,
+                    max_tokens: apiConfig.maxTokens
+                })
+            });
+
+            if (!response.ok) {
+                throw new Error(`API错误: ${response.status}`);
+            }
+
+            const data = await response.json();
+            return data.choices[0].message.content;
+        }
+
+        // 模拟回复生成
+        function generateMockResponse(userMessage) {
+            const responses = [
+                `你深入了迷雾森林，古老的树木似乎在低语。<span class="dice-roll">🎲 侦查检定: ${rollDiceSilent(20)}</span><br><br>在斑驳的树影中，你发现了一行脚印，通向北方废弃的塔楼。空气中弥漫着奥术能量的气息。`,
+                
+                `村长看着你，眼中闪烁着希望的光芒：<br><br><em>"勇敢的冒险者，我们的村庄正遭受狼人的威胁。只有你能帮我们找回失落的银月之剑..."</em><br><br>他递给你一张泛黄的地图，标记着危险的沼泽地带。`,
+                
+                `战斗开始！<br><br>三只哥布林从岩石后跳出，挥舞着生锈的短剑。<br><br><strong>先攻检定：</strong> <span class="dice-roll">🎲 1d20+3 = ${rollDiceSilent(20) + 3}</span><br>你抢先行动！`,
+                
+                `你在古老的图书馆中翻阅着尘封的卷轴。突然，你发现了一段关于"深渊之门"的记载...<br><br><span style="color: var(--accent-gold);">[获得情报：深渊之门的线索]</span><br>这可能会改变整个冒险的走向。`
+            ];
+            
+            // 根据关键词智能选择回复
+            if (userMessage.includes('攻击') || userMessage.includes('打') || userMessage.includes('杀')) {
+                return responses[2];
+            } else if (userMessage.includes('看') || userMessage.includes('找') || userMessage.includes('检查')) {
+                return responses[0];
+            } else if (userMessage.includes('对话') || userMessage.includes('说') || userMessage.includes('问')) {
+                return responses[1];
+            }
+            
+            return responses[Math.floor(Math.random() * responses.length)];
+        }
+
+        // 添加消息到聊天区
+        function addMessage(content, sender) {
+            const chatArea = document.getElementById('chatArea');
+            const messageDiv = document.createElement('div');
+            messageDiv.className = `message message-${sender}`;
+            
+            const time = new Date().toLocaleTimeString('zh-CN', {hour: '2-digit', minute: '2-digit'});
+            const name = sender === 'user' ? '👤 ' + (document.getElementById('charNameInput').value || '冒险者') : '🔮 守秘人 (AI)';
+            const color = sender === 'user' ? 'var(--accent-cyan)' : 'var(--accent-gold)';
+            
+            messageDiv.innerHTML = `
+                <div class="message-header">
+                    <span style="color: ${color};">${name}</span>
+                    <span style="color: var(--text-secondary); font-size: 12px;">${time}</span>
+                </div>
+                <div class="message-content">${content}</div>
+            `;
+            
+            chatArea.appendChild(messageDiv);
+            chatArea.scrollTop = chatArea.scrollHeight;
+            
+            // 添加到日志
+            addLog(`[${time}] ${sender === 'user' ? '玩家' : 'AI'}: ${content.replace(/<[^>]*>/g, '').substring(0, 50)}...`);
+        }
+
+        // 骰子功能
+        function rollDice(sides) {
+            const result = Math.floor(Math.random() * sides) + 1;
+            const modal = document.getElementById('diceModal');
+            const resultDiv = document.getElementById('diceResult');
+            const textDiv = document.getElementById('diceText');
+            
+            // 动画效果
+            let rolls = 0;
+            const interval = setInterval(() => {
+                resultDiv.textContent = Math.floor(Math.random() * sides) + 1;
+                rolls++;
+                if (rolls > 10) {
+                    clearInterval(interval);
+                    resultDiv.textContent = result;
+                    
+                    // 判定结果
+                    let text = '';
+                    if (result === 20 && sides === 20) text = '⚔ 大成功！传奇即将诞生！';
+                    else if (result === 1 && sides === 20) text = '💀 大失败...命运在嘲笑你。';
+                    else if (result >= 15) text = '✨ 成功！你的技艺得到了回报。';
+                    else if (result >= 10) text = '⚡ 勉强成功，但已足够。';
+                    else text = '❌ 失败...但冒险仍将继续。';
+                    
+                    textDiv.textContent = text;
+                    
+                    // 添加到聊天
+                    addMessage(`<span class="dice-roll">🎲 投掷 D${sides}: ${result}</span>`, 'user');
+                }
+            }, 50);
+            
+            modal.classList.add('active');
+        }
+
+        function rollDiceSilent(sides) {
+            return Math.floor(Math.random() * sides) + 1;
+        }
+
+        function closeDiceModal() {
+            document.getElementById('diceModal').classList.remove('active');
+        }
+
+        // 技能使用
+        function useSkill(skillName) {
+            const roll = rollDiceSilent(20);
+            const modifier = Math.floor(Math.random() * 5) + 1; // 模拟属性加值
+            const total = roll + modifier;
+            
+            addMessage(`尝试使用技能: <strong>${skillName}</strong> <span class="dice-roll">🎲 ${roll}+${modifier}=${total}</span>`, 'user');
+            
+            setTimeout(() => {
+                let result = '';
+                if (total >= 15) result = `🎉 成功！你的${skillName}技能发挥了作用。`;
+                else if (total >= 10) result = `⚡ 勉强成功，你${skillName}到了一些信息。`;
+                else result = `❌ ${skillName}失败，什么也没发现。`;
+                
+                addMessage(result, 'ai');
+            }, 500);
+        }
+
+        // 休息功能
+        function rest() {
+            const heal = Math.floor(Math.random() * 20) + 10;
+            const mpRestore = Math.floor(Math.random() * 30) + 20;
+            
+            updateHP(Math.min(gameState.maxHp, gameState.hp + heal));
+            updateMP(Math.min(gameState.maxMp, gameState.mp + mpRestore));
+            
+            addMessage(`你选择休息片刻...<br>恢复 ${heal} 点生命值和 ${mpRestore} 点魔力值`, 'user');
+            addLog(`[休息] 恢复 HP: +${heal}, MP: +${mpRestore}`);
+        }
+
+        // 更新状态条
+        function updateHP(value) {
+            gameState.hp = value;
+            document.getElementById('hp-value').textContent = value;
+            document.getElementById('hp-bar').style.width = (value / gameState.maxHp * 100) + '%';
+        }
+
+        function updateMP(value) {
+            gameState.mp = value;
+            document.getElementById('mp-value').textContent = value;
+            document.getElementById('mp-bar').style.width = (value / gameState.maxMp * 100) + '%';
+        }
+
+        // 设置管理
+        function saveSettings() {
+            apiConfig = {
+                url: document.getElementById('apiUrl').value,
+                key: document.getElementById('apiKey').value,
+                model: document.getElementById('modelSelect').value,
+                temperature: parseFloat(document.getElementById('temperature').value),
+                maxTokens: parseInt(document.getElementById('maxTokens').value)
+            };
+            
+            localStorage.setItem('apiUrl', apiConfig.url);
+            localStorage.setItem('apiKey', apiConfig.key);
+            localStorage.setItem('model', apiConfig.model);
+            localStorage.setItem('temperature', apiConfig.temperature);
+            localStorage.setItem('maxTokens', apiConfig.maxTokens);
+            
+            addLog('[系统] API配置已保存');
+            alert('配置已保存到本地存储');
+        }
+
+        function loadSettings() {
+            document.getElementById('apiUrl').value = apiConfig.url;
+            document.getElementById('apiKey').value = apiConfig.key;
+            document.getElementById('modelSelect').value = apiConfig.model;
+            document.getElementById('temperature').value = apiConfig.temperature;
+            document.getElementById('tempValue').textContent = apiConfig.temperature;
+            document.getElementById('maxTokens').value = apiConfig.maxTokens;
+        }
+
+        function saveGameSettings() {
+            const name = document.getElementById('charNameInput').value;
+            document.getElementById('char-name').textContent = name;
+            
+            // 根据职业调整头像
+            const classType = document.getElementById('classSelect').value;
+            const avatarMap = {
+                'warrior': '⚔',
+                'mage': '🧙‍♂️',
+                'rogue': '🗡',
+                'cleric': '✨'
+            };
+            document.querySelector('.character-avatar').textContent = avatarMap[classType] || '🧙‍♂️';
+            
+            addLog(`[系统] 角色设置已更新: ${name}`);
+            alert('游戏设置已应用');
+        }
+
+        // 日志功能
+        function addLog(message) {
+            const container = document.getElementById('logContainer');
+            const entry = document.createElement('div');
+            entry.style.marginBottom = '5px';
+            entry.textContent = `[${new Date().toLocaleTimeString('zh-CN')}] ${message}`;
+            container.appendChild(entry);
+            container.scrollTop = container.scrollHeight;
+        }
+
+        function clearLog() {
+            document.getElementById('logContainer').innerHTML = '';
+        }
+
+        // 背包功能
+        function openInventory() {
+            addMessage('🎒 打开背包查看物品...', 'user');
+            setTimeout(() => {
+                let items = gameState.inventory.map(i => `${i.icon} ${i.name} ×${i.count}`).join('<br>');
+                addMessage(`<strong>背包内容：</strong><br>${items}<br><br><span style="color: var(--text-secondary);">点击快捷栏中的物品可以使用</span>`, 'ai');
+            }, 300);
+        }
+
+        // 全屏切换
+        function toggleFullscreen() {
+            if (!document.fullscreenElement) {
+                document.documentElement.requestFullscreen();
+            } else {
+                document.exitFullscreen();
+            }
+        }
+
+        // 移动菜单切换
+        function toggleMobileMenu() {
+            const left = document.querySelector('.character-panel');
+            const right = document.querySelector('.settings-panel');
+            
+            // 简化的移动切换逻辑
+            if (left.style.display === 'none' || left.style.display === '') {
+                left.style.display = 'block';
+                right.style.display = 'none';
+                left.style.position = 'fixed';
+                left.style.zIndex = '999';
+                left.style.height = '100%';
+                left.style.width = '280px';
+            } else if (right.style.display === 'none' || right.style.display === '') {
+                left.style.display = 'none';
+                right.style.display = 'flex';
+                right.style.position = 'fixed';
+                right.style.zIndex = '999';
+                right.style.height = '100%';
+                right.style.width = '300px';
+                right.style.right = '0';
+            } else {
+                left.style.display = 'none';
+                right.style.display = 'none';
+            }
+        }
+
+        // 防止空格滚动
+        window.addEventListener('keydown', function(e) {
+            if(e.keyCode === 32 && e.target === document.body) {
+                e.preventDefault();
+            }
+        });
+    </script>
+</body>
+</html>
