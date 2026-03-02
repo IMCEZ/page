@@ -2299,7 +2299,8 @@
         // 2) SUPABASE_ANON_KEY 使用 Dashboard 中的 anon public key
         const SUPABASE_URL = 'https://hopddhrokczuyunhzvcy.supabase.co';
         const SUPABASE_ANON_KEY = 'sb_publishable_M9_2V2bsEz4NqA8k90j1Hw_Wwn6Eksr';
-        const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+        // 注意：全局的 window.supabase 来自上方引入的 SDK，这里创建一个客户端实例 supabaseClient
+        const supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
         // 全局状态
         let currentStep = 1;
@@ -3846,7 +3847,7 @@ ${WORLD_LORE_SUMMARY}`;
             }
 
             try {
-                const { data, error } = await supabase.auth.signInWithOAuth({
+                const { data, error } = await supabaseClient.auth.signInWithOAuth({
                     provider: 'discord',
                     options: {
                         redirectTo: window.location.origin  // 授权后跳回当前站点
@@ -3899,7 +3900,7 @@ ${WORLD_LORE_SUMMARY}`;
             // ===== Supabase 会话检测（处理 Discord OAuth 回调 & 页面刷新后恢复会话）=====
             async function checkSupabaseSession() {
                 try {
-                    const { data: { session }, error } = await supabase.auth.getSession();
+                    const { data: { session }, error } = await supabaseClient.auth.getSession();
                     if (error) {
                         console.error('[Supabase] getSession error:', error);
                         return false;
@@ -3961,7 +3962,7 @@ ${WORLD_LORE_SUMMARY}`;
             });
 
             // ===== 监听 Supabase Auth 状态变化 =====
-            supabase.auth.onAuthStateChange(function (event, session) {
+            supabaseClient.auth.onAuthStateChange(function (event, session) {
                 console.log('[Supabase Auth Event]', event);
                 if (event === 'SIGNED_IN' && session && session.user) {
                     const user = session.user;
