@@ -9,7 +9,7 @@ import { PresetManagerModal } from './sections/PresetManagerModal';
 import { ParticlesBackground } from './sections/ParticlesBackground';
 import { Toaster } from '@/components/ui/sonner';
 import { toast } from 'sonner';
-import type { UserInfo, CharacterData, ApiConfig } from './types';
+import type { UserInfo, CharacterData, ApiConfig, Preset } from './types';
 
 // Storage keys
 const STORAGE_KEYS = {
@@ -48,6 +48,7 @@ function App() {
     maxTokens: 2000,
     outputCharLimit: 500,
   });
+  const [presets, setPresets] = useState<Preset[]>([]);
 
   // Load API config from localStorage
   useEffect(() => {
@@ -64,6 +65,21 @@ function App() {
       setApiConfig(config);
     };
     loadConfig();
+  }, []);
+
+  // Load presets from localStorage
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem('astral_presets');
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (Array.isArray(parsed)) {
+          setPresets(parsed);
+        }
+      }
+    } catch (e) {
+      console.warn('Failed to load presets from localStorage', e);
+    }
   }, []);
 
   // Auth state change listener
@@ -129,6 +145,17 @@ function App() {
     localStorage.setItem(STORAGE_KEYS.outputCharLimit, config.outputCharLimit.toString());
     setApiConfig(config);
     toast.success('API 配置已保存');
+  };
+
+  // Save presets to localStorage
+  const updatePresets = (next: Preset[]) => {
+    setPresets(next);
+    try {
+      localStorage.setItem('astral_presets', JSON.stringify(next));
+    } catch (e) {
+      console.warn('Failed to save presets to localStorage', e);
+      toast.error('预设保存失败，本地存储不可用');
+    }
   };
 
   // Open API settings
@@ -219,6 +246,7 @@ function App() {
           onBackToCreation={() => setCurrentView('creation')}
           onOpenSettings={() => openApiSettings('game')}
           onOpenPresetManager={openPresetManager}
+          presets={presets}
           apiConfig={apiConfig}
         />
       )}
@@ -235,6 +263,8 @@ function App() {
       {/* Preset Manager Modal */}
       {showPresetModal && (
         <PresetManagerModal
+          presets={presets}
+          onChangePresets={updatePresets}
           onClose={() => setShowPresetModal(false)}
         />
       )}
