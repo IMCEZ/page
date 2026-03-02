@@ -3,6 +3,23 @@ const path = require("path");
 const fs = require("fs");
 const express = require("express");
 
+// Discord OAuth 环境变量检查（仅在本地 dev-server 启动时提示）
+(() => {
+  const required = [
+    "DISCORD_CLIENT_ID",
+    "DISCORD_CLIENT_SECRET",
+    "DISCORD_REDIRECT_URI",
+  ];
+  const missing = required.filter((key) => !process.env[key]);
+  if (missing.length > 0) {
+    // eslint-disable-next-line no-console
+    console.warn(
+      "[Discord OAuth] 缺少环境变量:",
+      missing.join(" / ")
+    );
+  }
+})();
+
 const app = express();
 const port = process.env.PORT || 3000;
 
@@ -13,9 +30,13 @@ const staticRoot = rootDir;
 app.use(express.json());
 
 // 模拟 Vercel 的 /api 路由：动态 require 对应文件并调用导出的 handler(req, res)
-app.all("/api/:name", async (req, res, next) => {
+app.all("/api/*", async (req, res, next) => {
   try {
-    const filePath = path.join(apiDir, `${req.params.name}.js`);
+    const relativePath = (req.path || "")
+      .replace(/^\/api\/?/, "")
+      .replace(/\/+$/, "");
+
+    const filePath = path.join(apiDir, `${relativePath}.js`);
     if (!fs.existsSync(filePath)) {
       return res.status(404).json({ error: "API route not found" });
     }

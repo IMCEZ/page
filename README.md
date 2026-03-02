@@ -42,6 +42,33 @@ LLM_MODEL=gpt-3.5-turbo
 
 > 注意：`.env` 已在 `.gitignore` 中忽略，请不要把真实密钥提交到 Git 仓库。
 
+## Discord 登录配置
+
+### 1. 前置条件
+
+- 在 [Discord Developer Portal](https://discord.com/developers/applications) 创建应用
+- 获取 Client ID 和 Client Secret
+- 在 OAuth2 > Redirects 中添加回调地址
+
+### 2. 环境变量（.env）
+
+```env
+DISCORD_CLIENT_ID=你的ClientID
+DISCORD_CLIENT_SECRET=你的ClientSecret
+DISCORD_REDIRECT_URI=http://localhost:3000/api/auth/discord/callback
+JWT_SECRET=自定义密钥
+```
+
+### 3. 登录流程
+
+1. 用户点击「使用 Discord 登录」
+2. 前端跳转 → `GET /api/auth/discord`
+3. 后端 302 → Discord 授权页
+4. 用户授权 → Discord 302 → `GET /api/auth/discord/callback?code=xxx`
+5. 后端用 code 换 token → 获取用户信息 → 签发 JWT
+6. 后端 302 → `/?auth=discord#token=xxx&user=base64`
+7. 前端解析 hash → 存储 token → 隐藏登录层 → 进入游戏
+
 ### 4. 初始化数据库（Supabase）
 
 1. 打开 Supabase 控制台 → 左侧 **SQL Editor**
