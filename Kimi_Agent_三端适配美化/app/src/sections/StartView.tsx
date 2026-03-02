@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { toast } from 'sonner';
 import type { UserInfo, Conversation } from '@/types';
 
 interface StartViewProps {
@@ -29,6 +30,28 @@ export function StartView({ onNewAdventure, onContinueAdventure, onOpenSettings,
     };
     loadConversations();
   }, []);
+
+  const ensureHasSavesOrCharacter = () => {
+    try {
+      const lastChar = localStorage.getItem('astral_last_character');
+      const convRaw = localStorage.getItem('astral_chat_conversations_fallback');
+      const hasCharacter = !!lastChar;
+      let hasConversations = false;
+
+      if (convRaw) {
+        const list = JSON.parse(convRaw);
+        hasConversations = Array.isArray(list) && list.length > 0;
+      }
+
+      if (!hasCharacter && !hasConversations) {
+        toast.error('暂无任何存档，请先创建角色开始新冒险');
+        return false;
+      }
+    } catch {
+      // 解析异常时不阻塞后续逻辑
+    }
+    return true;
+  };
 
   const handleLoadConversation = (id: string) => {
     // 进入游戏时自动打开聊天记录日志面板
@@ -95,7 +118,12 @@ export function StartView({ onNewAdventure, onContinueAdventure, onOpenSettings,
                 🎮 开始新冒险
               </button>
               <button
-                onClick={onContinueAdventure}
+                onClick={() => {
+                  if (!ensureHasSavesOrCharacter()) return;
+                  // 继续冒险默认进入日志视图，方便选择具体存档
+                  sessionStorage.setItem('astral_open_log_on_enter', '1');
+                  onContinueAdventure();
+                }}
                 className="btn-secondary px-6 py-3 rounded-lg font-semibold flex items-center gap-2 min-w-[160px] justify-center"
               >
                 ▶ 继续冒险
@@ -122,11 +150,12 @@ export function StartView({ onNewAdventure, onContinueAdventure, onOpenSettings,
                   👤 登录 / 管理账号
                 </button>
                 <button
-              onClick={() => {
-                // 从快捷入口打开时，也默认进入聊天记录日志视图
-                sessionStorage.setItem('astral_open_log_on_enter', '1');
-                onContinueAdventure();
-              }}
+                  onClick={() => {
+                    if (!ensureHasSavesOrCharacter()) return;
+                    // 从快捷入口打开时，也默认进入聊天记录日志视图
+                    sessionStorage.setItem('astral_open_log_on_enter', '1');
+                    onContinueAdventure();
+                  }}
                   className="w-full btn-secondary px-4 py-2.5 rounded-lg text-sm flex items-center gap-2"
                 >
                   📜 打开聊天记录
