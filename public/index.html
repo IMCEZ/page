@@ -1547,7 +1547,7 @@
         </div>
     </div>
 
-    <div id="creation-view">
+    <div id="creation-view" style="display: none;">
     <div class="loading-overlay" id="loading" aria-live="polite">
         <div class="loading-text">⚔️ 正在初始化角色创建系统...</div>
     </div>
@@ -2428,12 +2428,15 @@
             console.log('[Auth] 会话已应用:', gameUser.nickname || gameUser.email,
                         '| provider:', gameUser.auth_provider);
 
-            // 如果 DOM 已就绪，立即隐藏登录页
+            // 如果 DOM 已就绪，立即隐藏登录页，并回到开始游戏主界面
             if (_authDomReady) {
                 const overlay = document.getElementById('authOverlay');
                 if (overlay) overlay.classList.add('hidden');
                 cleanUrlHashGlobal();
                 fillNicknameIfEmpty();
+                if (typeof showStartView === 'function') {
+                    showStartView();
+                }
             }
             // 否则 initAuthOverlay() 中会检查 _pendingSession
         }
@@ -2506,6 +2509,10 @@
             updateProgress();
             checkScreenSize();
             initAuthOverlay();
+            // 默认进入开始游戏主界面，角色创建与游戏界面初始隐藏
+            if (typeof showStartView === 'function') {
+                showStartView();
+            }
         };
 
         // 监听屏幕尺寸变化
@@ -4610,6 +4617,26 @@ ${WORLD_LORE_SUMMARY}`;
             if (overlay) overlay.classList.remove('hidden');
         }
 
+        function openChatHistoryFromStart() {
+            // 切换到游戏视图
+            goToGameFromStart();
+            // 稍后打开设置抽屉并切到日志 Tab
+            setTimeout(function() {
+                const logTabBtn = document.querySelector('#game-view .settings-tabs .tab-btn[data-tab="log"]');
+                if (logTabBtn) {
+                    logTabBtn.click();
+                }
+                const panel = document.getElementById('gameSettingsPanel');
+                const overlay = document.getElementById('gameSettingsOverlay');
+                const btn = document.getElementById('btnGameSettings');
+                if (panel && overlay && btn) {
+                    panel.classList.add('drawer-open');
+                    overlay.classList.add('open');
+                    btn.classList.add('drawer-open');
+                }
+            }, 50);
+        }
+
         // ---------- 登录 / 注册一体化逻辑（Supabase + 游戏） ----------
         const API_BASE = "";
         let gameToken = localStorage.getItem('token') || '';
@@ -4696,6 +4723,9 @@ ${WORLD_LORE_SUMMARY}`;
                 overlay.classList.add('hidden');
                 cleanUrlHashGlobal();
                 fillNicknameIfEmpty();
+                if (typeof showStartView === 'function') {
+                    showStartView();
+                }
                 bindEmailLoginButtons();  // 仍然绑定按钮事件
                 return;
             }
