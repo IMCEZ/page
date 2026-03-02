@@ -5,6 +5,7 @@ import type { ChatMessage, Conversation, ApiConfig } from '@/types';
 interface GameViewProps {
   onBackToCreation: () => void;
   onOpenSettings: () => void;
+  onOpenPresetManager: () => void;
   apiConfig: ApiConfig;
 }
 
@@ -93,7 +94,7 @@ function formatMessageContent(str: string) {
   return s;
 }
 
-export function GameView({ onBackToCreation, onOpenSettings, apiConfig }: GameViewProps) {
+export function GameView({ onBackToCreation, onOpenSettings, onOpenPresetManager, apiConfig }: GameViewProps) {
   const [character, setCharacter] = useState<any>(null);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [inputText, setInputText] = useState('');
@@ -956,7 +957,7 @@ export function GameView({ onBackToCreation, onOpenSettings, apiConfig }: GameVi
                     预设系统用于管理 AI 的行为模式和叙事风格。
                   </p>
                   <button
-                    onClick={onOpenSettings}
+                    onClick={onOpenPresetManager}
                     className="w-full btn-primary py-2 rounded-lg font-semibold"
                   >
                     管理预设

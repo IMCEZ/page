@@ -5,6 +5,7 @@ import { StartView } from './sections/StartView';
 import { CreationView } from './sections/CreationView';
 import { GameView } from './sections/GameView';
 import { ApiSettingsModal } from './sections/ApiSettingsModal';
+import { PresetManagerModal } from './sections/PresetManagerModal';
 import { ParticlesBackground } from './sections/ParticlesBackground';
 import { Toaster } from '@/components/ui/sonner';
 import { toast } from 'sonner';
@@ -28,6 +29,7 @@ function App() {
   const [currentView, setCurrentView] = useState<'auth' | 'start' | 'creation' | 'game'>('start');
   const [showApiModal, setShowApiModal] = useState(false);
   const [, setApiModalTarget] = useState<'creation' | 'game'>('creation');
+  const [showPresetModal, setShowPresetModal] = useState(false);
   
   // Auth state
   const [user, setUser] = useState<UserInfo | null>(null);
@@ -135,6 +137,11 @@ function App() {
     setShowApiModal(true);
   };
 
+  // Open preset manager
+  const openPresetManager = () => {
+    setShowPresetModal(true);
+  };
+
   // Navigation handlers
   const goToStart = () => setCurrentView('start');
   const goToCreation = () => setCurrentView('creation');
@@ -211,6 +218,7 @@ function App() {
         <GameView
           onBackToCreation={() => setCurrentView('creation')}
           onOpenSettings={() => openApiSettings('game')}
+          onOpenPresetManager={openPresetManager}
           apiConfig={apiConfig}
         />
       )}
@@ -221,6 +229,13 @@ function App() {
           config={apiConfig}
           onSave={saveApiConfig}
           onClose={() => setShowApiModal(false)}
+        />
+      )}
+
+      {/* Preset Manager Modal */}
+      {showPresetModal && (
+        <PresetManagerModal
+          onClose={() => setShowPresetModal(false)}
         />
       )}
       
