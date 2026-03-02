@@ -2299,7 +2299,7 @@
         // 1) SUPABASE_URL 形如 https://xxxx.supabase.co
         // 2) SUPABASE_ANON_KEY 使用 Dashboard 中的 anon public key
         const SUPABASE_URL = 'https://hopddhrokczuyunhzvcy.supabase.co';
-        const SUPABASE_ANON_KEY = 'sb_publishable_M9_2V2bsEz4NqA8k90j1Hw_Wwn6Eksr';
+        const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImhvcGRkaHJva2N6dXl1bmh6dmN5Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzI0MTQ3MjksImV4cCI6MjA4Nzk5MDcyOX0.dw54cXeD7HQR2x9Si2-5XTuQodFuM8kkNzSgWPZQpI0';
         // 兼容不同加载方式（unpkg UMD / 其他挂载方式）
         const supabaseGlobal = window.supabase || window.Supabase || {};
         const createClient = supabaseGlobal.createClient || supabaseGlobal.createClient?.bind(supabaseGlobal);
