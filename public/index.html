@@ -1487,13 +1487,14 @@
         .auth-tip span {
             color: var(--accent-gold);
         }
-
+        
         @media (max-width: 600px) {
             .auth-card {
                 padding: 20px 16px 18px;
             }
         }
     </style>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 </head>
 <body>
     <!-- 登录 / 注册覆盖层：成功登录后隐藏，允许开始游戏 -->
@@ -1528,12 +1529,12 @@
                 </button>
             </div>
 
-            <!-- Discord 登录 -->
+            <!-- Discord OAuth 登录 -->
             <div class="auth-divider">
                 <span>或</span>
             </div>
             <button id="authDiscordBtn" type="button" class="auth-button auth-button-discord" onclick="loginWithDiscord()">
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor" style="margin-right:8px;">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor" style="margin-right:8px;flex-shrink:0;">
                     <path d="M20.317 4.37a19.791 19.791 0 0 0-4.885-1.515.074.074 0 0 0-.079.037c-.21.375-.444.864-.608 1.25a18.27 18.27 0 0 0-5.487 0 12.64 12.64 0 0 0-.617-1.25.077.077 0 0 0-.079-.037A19.736 19.736 0 0 0 3.677 4.37a.07.07 0 0 0-.032.027C.533 9.046-.32 13.58.099 18.057a.082.082 0 0 0 .031.057 19.9 19.9 0 0 0 5.993 3.03.078.078 0 0 0 .084-.028c.462-.63.874-1.295 1.226-1.994a.076.076 0 0 0-.041-.106 13.107 13.107 0 0 1-1.872-.892.077.077 0 0 1-.008-.128 10.2 10.2 0 0 0 .372-.292.074.074 0 0 1 .077-.01c3.928 1.793 8.18 1.793 12.062 0a.074.074 0 0 1 .078.01c.12.098.246.198.373.292a.077.077 0 0 1-.006.127 12.299 12.299 0 0 1-1.873.892.077.077 0 0 0-.041.107c.36.698.772 1.362 1.225 1.993a.076.076 0 0 0 .084.028 19.839 19.839 0 0 0 6.002-3.03.077.077 0 0 0 .032-.054c.5-5.177-.838-9.674-3.549-13.66a.061.061 0 0 0-.031-.03z"/>
                 </svg>
                 使用 Discord 登录
@@ -2292,6 +2293,14 @@
     </div>
 
     <script>
+        // ===== Supabase 初始化 =====
+        // TODO: 这里的 URL 和 Key 需要你替换为自己 Supabase 项目的真实值
+        // 1) SUPABASE_URL 形如 https://xxxx.supabase.co
+        // 2) SUPABASE_ANON_KEY 使用 Dashboard 中的 anon public key
+        const SUPABASE_URL = 'https://hopddhrokczuyunhzvcy.supabase.co';
+        const SUPABASE_ANON_KEY = 'sb_publishable_M9_2V2bsEz4NqA8k90j1Hw_Wwn6Eksr';
+        const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
         // 全局状态
         let currentStep = 1;
         const totalSteps = 8;
@@ -3822,6 +3831,52 @@ ${WORLD_LORE_SUMMARY}`;
             }
         }
 
+        /**
+         * Discord OAuth 登录 —— 使用 Supabase Auth
+         * Supabase 会自动处理：跳转 Discord → 用户授权 → 回调 → 创建/登录用户 → 跳回前端
+         */
+        async function loginWithDiscord() {
+            const btn = document.getElementById('authDiscordBtn');
+            const errorEl = document.getElementById('authErrorText');
+            if (errorEl) errorEl.textContent = '';
+
+            if (btn) {
+                btn.classList.add('loading');
+                btn.innerHTML = '正在跳转到 Discord...';
+            }
+
+            try {
+                const { data, error } = await supabase.auth.signInWithOAuth({
+                    provider: 'discord',
+                    options: {
+                        redirectTo: window.location.origin  // 授权后跳回当前站点
+                    }
+                });
+
+                if (error) {
+                    throw error;
+                }
+                // signInWithOAuth 会自动跳转，如果走到这里说明出了问题
+            } catch (err) {
+                console.error('[Discord Auth Error]', err);
+                if (errorEl) errorEl.textContent = 'Discord 登录失败: ' + (err.message || String(err));
+                if (btn) {
+                    btn.classList.remove('loading');
+                    btn.innerHTML = '<svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor" style="margin-right:8px;flex-shrink:0;"><path d="M20.317 4.37a19.791 19.791 0 0 0-4.885-1.515.074.074 0 0 0-.079.037c-.21.375-.444.864-.608 1.25a18.27 18.27 0 0 0-5.487 0 12.64 12.64 0 0 0-.617-1.25.077.077 0 0 0-.079-.037A19.736 19.736 0 0 0 3.677 4.37a.07.07 0 0 0-.032.027C.533 9.046-.32 13.58.099 18.057a.082.082 0 0 0 .031.057 19.9 19.9 0 0 0 5.993 3.03.078.078 0 0 0 .084-.028c.462-.63.874-1.295 1.226-1.994a.076.076 0 0 0-.041-.106 13.107 13.107 0 0 1-1.872-.892.077.077 0 0 1-.008-.128 10.2 10.2 0 0 0 .372-.292.074.074 0 0 1 .077-.01c3.928 1.793 8.18 1.793 12.062 0a.074.074 0 0 1 .078.01c.12.098.246.198.373.292a.077.077 0 0 1-.006.127 12.299 12.299 0 0 1-1.873.892.077.077 0 0 0-.041.107c.36.698.772 1.362 1.225 1.993a.076.076 0 0 0 .084.028 19.839 19.839 0 0 0 6.002-3.03.077.077 0 0 0 .032-.054c.5-5.177-.838-9.674-3.549-13.66a.061.061 0 0 0-.031-.03z"/></svg> 使用 Discord 登录';
+                }
+            }
+        }
+
+        // bfcache 恢复处理（从 Discord 页面返回时）
+        window.addEventListener('pageshow', function(event) {
+            if (event.persisted) {
+                const btn = document.getElementById('authDiscordBtn');
+                if (btn) {
+                    btn.classList.remove('loading');
+                }
+            }
+        });
+
         function initAuthOverlay() {
             const overlay = document.getElementById('authOverlay');
             const emailInput = document.getElementById('authEmail');
@@ -3830,51 +3885,8 @@ ${WORLD_LORE_SUMMARY}`;
             const errorEl = document.getElementById('authErrorText');
             const loginBtn = document.getElementById('authLoginBtn');
             const registerBtn = document.getElementById('authRegisterBtn');
-            const discordBtn = document.getElementById('authDiscordBtn');
 
             if (!overlay || !emailInput || !passwordInput || !loginBtn || !registerBtn) return;
-
-            // ===== Discord OAuth 回调结果检测 =====
-            (function handleDiscordCallback() {
-                const urlParams = new URLSearchParams(window.location.search);
-                const authType = urlParams.get('auth');
-
-                if (authType === 'discord') {
-                    // 从 URL hash 中解析 token 和 user
-                    const hashParams = new URLSearchParams(window.location.hash.substring(1));
-                    const token = hashParams.get('token');
-                    const userBase64 = hashParams.get('user');
-
-                    if (token && userBase64) {
-                        try {
-                            const userJson = atob(userBase64);
-                            const user = JSON.parse(userJson);
-
-                            // 存储登录信息
-                            gameToken = token;
-                            gameUser = user;
-                            localStorage.setItem('token', token);
-                            localStorage.setItem('user', JSON.stringify(user));
-
-                            // 清除 URL 中的认证参数（保持地址栏干净）
-                            window.history.replaceState({}, document.title, window.location.pathname);
-
-                            console.log('[Auth] Discord 登录成功:', user.username || user.email);
-                        } catch (e) {
-                            console.error('[Auth] Discord 回调解析失败:', e);
-                        }
-                    }
-                } else if (authType === 'error') {
-                    const message = urlParams.get('message') || '登录失败';
-                    const errorEl = document.getElementById('authErrorText');
-                    if (errorEl) {
-                        errorEl.textContent = 'Discord 登录失败: ' + decodeURIComponent(message);
-                    }
-                    // 清除 URL 参数
-                    window.history.replaceState({}, document.title, window.location.pathname);
-                }
-            })();
-            // ===== Discord OAuth 回调结果检测 END =====
 
             function hideOverlay() {
                 overlay.classList.add('hidden');
@@ -3884,24 +3896,103 @@ ${WORLD_LORE_SUMMARY}`;
                 overlay.classList.remove('hidden');
             }
 
-            // 已有登录信息则直接进入游戏
-            if (gameToken && gameUser) {
-                hideOverlay();
-                // 如果用户通过 Discord 登录且有头像，可以在后续游戏中使用
-                if (gameUser && gameUser.discord_avatar) {
-                    console.log('[Auth] Discord 头像:', gameUser.discord_avatar);
-                }
-                // 如果有昵称，更新到角色创建页
-                if (gameUser && gameUser.nickname) {
-                    const nicknameInput = document.getElementById('authNickname');
-                    if (nicknameInput && !nicknameInput.value) {
-                        nicknameInput.value = gameUser.nickname;
+            // ===== Supabase 会话检测（处理 Discord OAuth 回调 & 页面刷新后恢复会话）=====
+            async function checkSupabaseSession() {
+                try {
+                    const { data: { session }, error } = await supabase.auth.getSession();
+                    if (error) {
+                        console.error('[Supabase] getSession error:', error);
+                        return false;
                     }
+                    if (session && session.user) {
+                        const user = session.user;
+                        const meta = user.user_metadata || {};
+                        gameUser = {
+                            id: user.id,
+                            email: user.email || '',
+                            nickname: meta.full_name || meta.name || (meta.custom_claims && meta.custom_claims.global_name) || meta.preferred_username || '',
+                            username: meta.preferred_username || meta.name || '',
+                            discord_avatar: meta.avatar_url || '',
+                            auth_provider: (user.app_metadata && user.app_metadata.provider) || 'unknown'
+                        };
+                        gameToken = session.access_token;
+                        localStorage.setItem('token', gameToken);
+                        localStorage.setItem('user', JSON.stringify(gameUser));
+                        console.log('[Auth] Supabase 登录成功:', gameUser.nickname || gameUser.email, '(', gameUser.auth_provider, ')');
+                        return true;
+                    }
+                    return false;
+                } catch (e) {
+                    console.error('[Supabase] session check failed:', e);
+                    return false;
                 }
-            } else {
-                showOverlay();
             }
 
+            // 先检查 Supabase 会话（优先，处理 Discord 回调和刷新恢复）
+            checkSupabaseSession().then(function (loggedIn) {
+                if (loggedIn) {
+                    hideOverlay();
+                    // 如果有昵称，更新到角色创建页
+                    if (gameUser && gameUser.nickname) {
+                        const nnInput = document.getElementById('authNickname');
+                        if (nnInput && !nnInput.value) {
+                            nnInput.value = gameUser.nickname;
+                        }
+                    }
+                    // 清除 URL 中 Supabase 回调带的 hash 参数
+                    if (window.location.hash) {
+                        window.history.replaceState({}, document.title, window.location.pathname);
+                    }
+                    return;
+                }
+
+                // 如果没有 Supabase 会话但本地还有旧的 token/user，则按旧逻辑处理
+                if (gameToken && gameUser) {
+                    hideOverlay();
+                    if (gameUser && gameUser.nickname) {
+                        const nnInput = document.getElementById('authNickname');
+                        if (nnInput && !nnInput.value) {
+                            nnInput.value = gameUser.nickname;
+                        }
+                    }
+                } else {
+                    showOverlay();
+                }
+            });
+
+            // ===== 监听 Supabase Auth 状态变化 =====
+            supabase.auth.onAuthStateChange(function (event, session) {
+                console.log('[Supabase Auth Event]', event);
+                if (event === 'SIGNED_IN' && session && session.user) {
+                    const user = session.user;
+                    const meta = user.user_metadata || {};
+                    gameUser = {
+                        id: user.id,
+                        email: user.email || '',
+                        nickname: meta.full_name || meta.name || (meta.custom_claims && meta.custom_claims.global_name) || meta.preferred_username || '',
+                        username: meta.preferred_username || meta.name || '',
+                        discord_avatar: meta.avatar_url || '',
+                        auth_provider: (user.app_metadata && user.app_metadata.provider) || 'unknown'
+                    };
+                    gameToken = session.access_token;
+                    localStorage.setItem('token', gameToken);
+                    localStorage.setItem('user', JSON.stringify(gameUser));
+                    hideOverlay();
+
+                    // 清除 URL hash（去掉 Supabase 回调片段）
+                    if (window.location.hash) {
+                        window.history.replaceState({}, document.title, window.location.pathname);
+                    }
+                } else if (event === 'SIGNED_OUT') {
+                    gameToken = '';
+                    gameUser = null;
+                    localStorage.removeItem('token');
+                    localStorage.removeItem('user');
+                    showOverlay();
+                }
+            });
+
+            // ===== 原有邮箱登录/注册逻辑（保持不变）=====
             async function handleRegister() {
                 const email = emailInput.value.trim();
                 const password = passwordInput.value.trim();
@@ -3911,7 +4002,6 @@ ${WORLD_LORE_SUMMARY}`;
                     errorEl.textContent = '邮箱和密码不能为空';
                     return;
                 }
-
                 errorEl.textContent = '';
                 setAuthButtonLoading(registerBtn, true);
 
@@ -3942,7 +4032,6 @@ ${WORLD_LORE_SUMMARY}`;
                     errorEl.textContent = '邮箱和密码不能为空';
                     return;
                 }
-
                 errorEl.textContent = '';
                 setAuthButtonLoading(loginBtn, true);
 
@@ -3975,11 +4064,6 @@ ${WORLD_LORE_SUMMARY}`;
 
             loginBtn.addEventListener('click', handleLogin);
             registerBtn.addEventListener('click', handleRegister);
-
-            if (discordBtn) {
-                discordBtn.addEventListener('click', loginWithDiscord);
-            }
-
             passwordInput.addEventListener('keydown', function (e) {
                 if (e.key === 'Enter') {
                     e.preventDefault();
@@ -3987,42 +4071,6 @@ ${WORLD_LORE_SUMMARY}`;
                 }
             });
         }
-
-        /** Discord OAuth2 登录：跳转到后端接口，后端再重定向到 Discord */
-        function loginWithDiscord() {
-            const btn = document.getElementById('authDiscordBtn');
-            if (btn) {
-                const originalHtml = btn.innerHTML;
-                btn.dataset.originalHtml = originalHtml;
-                btn.classList.add('loading');
-                btn.innerHTML = '正在跳转到 Discord...';
-
-                // 如果 5 秒后仍在当前页面（跳转失败），恢复按钮
-                setTimeout(function () {
-                    if (btn && document.body.contains(btn) && btn.classList.contains('loading')) {
-                        btn.classList.remove('loading');
-                        if (btn.dataset.originalHtml) {
-                            btn.innerHTML = btn.dataset.originalHtml;
-                        }
-                    }
-                }, 5000);
-            }
-            // 直接跳转后端，后端负责构造 Discord 授权 URL 并 302
-            window.location.href = API_BASE + '/api/auth/discord';
-        }
-
-        // bfcache 恢复处理：从 Discord 返回时如果页面从缓存恢复，重置按钮状态
-        window.addEventListener('pageshow', function (event) {
-            if (event && event.persisted) {
-                const btn = document.getElementById('authDiscordBtn');
-                if (btn) {
-                    btn.classList.remove('loading');
-                    if (btn.dataset && btn.dataset.originalHtml) {
-                        btn.innerHTML = btn.dataset.originalHtml;
-                    }
-                }
-            }
-        });
 
         // ---------- 背景粒子（轻量版）
         (function initParticles() {
