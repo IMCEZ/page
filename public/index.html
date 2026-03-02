@@ -1494,7 +1494,8 @@
             }
         }
     </style>
-    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <!-- Supabase JS SDK：使用 unpkg 的 UMD 版本，避免部分浏览器对 jsDelivr 的 Tracking Prevention 拦截 -->
+    <script src="https://unpkg.com/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
 </head>
 <body>
     <!-- 登录 / 注册覆盖层：成功登录后隐藏，允许开始游戏 -->
@@ -2299,8 +2300,13 @@
         // 2) SUPABASE_ANON_KEY 使用 Dashboard 中的 anon public key
         const SUPABASE_URL = 'https://hopddhrokczuyunhzvcy.supabase.co';
         const SUPABASE_ANON_KEY = 'sb_publishable_M9_2V2bsEz4NqA8k90j1Hw_Wwn6Eksr';
-        // 注意：全局的 window.supabase 来自上方引入的 SDK，这里创建一个客户端实例 supabaseClient
-        const supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+        // 兼容不同加载方式（unpkg UMD / 其他挂载方式）
+        const supabaseGlobal = window.supabase || window.Supabase || {};
+        const createClient = supabaseGlobal.createClient || supabaseGlobal.createClient?.bind(supabaseGlobal);
+        if (!createClient) {
+            console.error('[Supabase] SDK 未加载成功！');
+        }
+        const supabaseClient = createClient ? createClient(SUPABASE_URL, SUPABASE_ANON_KEY) : null;
 
         // 全局状态
         let currentStep = 1;
