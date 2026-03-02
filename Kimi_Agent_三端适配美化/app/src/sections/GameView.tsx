@@ -17,6 +17,7 @@ const STORAGE_KEYS = {
   maxTokens: 'astral_max_tokens',
   outputCharLimit: 'astral_output_char_limit',
   createdCharacter: 'astral_created_character',
+  lastCharacter: 'astral_last_character',
 };
 
 const WORLD_LORE_SUMMARY = `- 世界名称：源界「艾瑟拉」（Aethera），由本源之力驱动的全沉浸虚拟世界，NPC 视一切为真实。
@@ -106,7 +107,11 @@ export function GameView({ onBackToCreation, onOpenSettings, apiConfig }: GameVi
 
   // Load character
   useEffect(() => {
-    const raw = sessionStorage.getItem(STORAGE_KEYS.createdCharacter);
+    // 优先使用本次会话中的角色，其次尝试从本地最近角色档案恢复
+    const sessionRaw = sessionStorage.getItem(STORAGE_KEYS.createdCharacter);
+    const localRaw = sessionRaw ? null : localStorage.getItem(STORAGE_KEYS.lastCharacter);
+    const raw = sessionRaw || localRaw;
+
     if (raw) {
       try {
         const char = JSON.parse(raw);
@@ -123,7 +128,12 @@ export function GameView({ onBackToCreation, onOpenSettings, apiConfig }: GameVi
       } catch (e) {
         console.error('Failed to load character', e);
       }
+      return;
     }
+
+    // 没有任何角色档案时，优雅回退到角色创建界面
+    toast.error('暂无角色档案，请先创建角色');
+    onBackToCreation();
   }, []);
 
   // Load conversations
@@ -146,6 +156,14 @@ export function GameView({ onBackToCreation, onOpenSettings, apiConfig }: GameVi
 
   // Check for conversation to load
   useEffect(() => {
+    // 根据入口标记，自动打开日志面板，方便选择历史存档
+    const shouldOpenLog = sessionStorage.getItem('astral_open_log_on_enter') === '1';
+    if (shouldOpenLog) {
+      sessionStorage.removeItem('astral_open_log_on_enter');
+      setSettingsOpen(true);
+      setActiveTab('log');
+    }
+
     const loadId = sessionStorage.getItem('astral_load_conversation');
     if (loadId) {
       sessionStorage.removeItem('astral_load_conversation');

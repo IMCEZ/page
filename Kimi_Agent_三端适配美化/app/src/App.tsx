@@ -20,11 +20,12 @@ const STORAGE_KEYS = {
   maxTokens: 'astral_max_tokens',
   outputCharLimit: 'astral_output_char_limit',
   createdCharacter: 'astral_created_character',
+  lastCharacter: 'astral_last_character',
 };
 
 function App() {
   // View state
-  const [currentView, setCurrentView] = useState<'auth' | 'start' | 'creation' | 'game'>('auth');
+  const [currentView, setCurrentView] = useState<'auth' | 'start' | 'creation' | 'game'>('start');
   const [showApiModal, setShowApiModal] = useState(false);
   const [, setApiModalTarget] = useState<'creation' | 'game'>('creation');
   
@@ -81,7 +82,6 @@ function App() {
         setUser(userInfo);
         localStorage.setItem('token', session.access_token);
         localStorage.setItem('user', JSON.stringify(userInfo));
-        
         if (currentView === 'auth') {
           setCurrentView('start');
         }
@@ -89,7 +89,8 @@ function App() {
         setUser(null);
         localStorage.removeItem('token');
         localStorage.removeItem('user');
-        setCurrentView('auth');
+        // 默认回到开始界面，保持本地冒险可用
+        setCurrentView('start');
       }
       setIsAuthReady(true);
     });
@@ -150,6 +151,8 @@ function App() {
       avatar: getRaceAvatar(data.race),
     };
     sessionStorage.setItem(STORAGE_KEYS.createdCharacter, JSON.stringify(character));
+     // 同步一份长期角色档案到 localStorage，便于“继续冒险”恢复
+    localStorage.setItem(STORAGE_KEYS.lastCharacter, JSON.stringify(character));
     setCurrentView('game');
   };
 

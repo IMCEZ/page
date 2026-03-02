@@ -31,6 +31,8 @@ export function StartView({ onNewAdventure, onContinueAdventure, onOpenSettings,
   }, []);
 
   const handleLoadConversation = (id: string) => {
+    // 进入游戏时自动打开聊天记录日志面板
+    sessionStorage.setItem('astral_open_log_on_enter', '1');
     sessionStorage.setItem('astral_load_conversation', id);
     onContinueAdventure();
   };
@@ -120,7 +122,11 @@ export function StartView({ onNewAdventure, onContinueAdventure, onOpenSettings,
                   👤 登录 / 管理账号
                 </button>
                 <button
-                  onClick={onContinueAdventure}
+              onClick={() => {
+                // 从快捷入口打开时，也默认进入聊天记录日志视图
+                sessionStorage.setItem('astral_open_log_on_enter', '1');
+                onContinueAdventure();
+              }}
                   className="w-full btn-secondary px-4 py-2.5 rounded-lg text-sm flex items-center gap-2"
                 >
                   📜 打开聊天记录

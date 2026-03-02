@@ -29,16 +29,19 @@ export function AuthOverlay({ onLogin }: AuthOverlayProps) {
       });
       
       if (authError) {
-        setError(authError.message);
+        setError(`登录失败：${authError.message}`);
         return;
       }
       
       if (data.session) {
         toast.success('登录成功');
         onLogin();
+      } else {
+        setError('登录失败：未获取到会话，请稍后重试');
       }
-    } catch (e) {
-      setError('登录失败，请稍后重试');
+    } catch (e: any) {
+      const message = typeof e?.message === 'string' ? e.message : '未知错误';
+      setError(`登录异常：${message}`);
     } finally {
       setIsLoading(false);
     }
@@ -64,13 +67,14 @@ export function AuthOverlay({ onLogin }: AuthOverlayProps) {
       });
       
       if (authError) {
-        setError(authError.message);
+        setError(`注册失败：${authError.message}`);
         return;
       }
       
-      setError('注册成功，请查收验证邮件或登录');
-    } catch (e) {
-      setError('注册失败，请稍后重试');
+      setError('注册成功：请查收验证邮件或直接尝试登录');
+    } catch (e: any) {
+      const message = typeof e?.message === 'string' ? e.message : '未知错误';
+      setError(`注册异常：${message}`);
     } finally {
       setIsLoading(false);
     }
