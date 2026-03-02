@@ -2177,6 +2177,69 @@
     </div>
     </div>
 
+    <!-- 开始游戏主界面 -->
+    <div id="start-view">
+        <div class="bg-texture"></div>
+        <div class="game-container" style="min-height: calc(100vh - 40px); display: flex; flex-direction: column; justify-content: center; align-items: stretch;">
+            <header class="game-header" style="border-bottom: none; margin-bottom: 12px;">
+                <div class="game-title">
+                    <div class="rune-icon">⚔</div>
+                    <span>Azure Legend</span>
+                </div>
+                <div class="game-header-right">
+                    <button type="button" class="btn-settings-toggle" onclick="openApiSettings()" title="API 与模型配置">⚙ 配置</button>
+                    <button type="button" onclick="openAuthOverlay()" style="background: transparent; border: 1px solid var(--accent-gold); color: var(--accent-gold); padding: 6px 12px; border-radius: 6px; cursor: pointer;">登录 / 账号</button>
+                </div>
+            </header>
+            <main class="main-content" style="display:flex;flex-direction:column;gap:16px;max-width:960px;margin:0 auto;padding:16px;">
+                <section style="display:flex;flex-direction:column;gap:16px;">
+                    <div class="preview-card" style="display:flex;flex-direction:column;align-items:flex-start;gap:12px;">
+                        <div style="display:flex;align-items:center;gap:10px;">
+                            <div class="rune-icon">✨</div>
+                            <div>
+                                <h2 style="margin:0;font-size:clamp(1.4rem,3vw,1.9rem);">开始你的艾瑟拉冒险</h2>
+                                <p style="margin:4px 0 0;color:var(--text-secondary);font-size:0.9rem;">先配置 API，再创建角色，最后与守秘人一起踏入源界。</p>
+                            </div>
+                        </div>
+                        <div style="display:flex;flex-wrap:wrap;gap:12px;margin-top:8px;">
+                            <button type="button" class="btn btn-primary" style="min-width:160px;justify-content:center;" onclick="goToCreationFromStart()">
+                                🎮 开始新冒险
+                            </button>
+                            <button type="button" class="btn btn-secondary" style="min-width:160px;justify-content:center;" onclick="goToGameFromStart()">
+                                ▶ 继续冒险
+                            </button>
+                        </div>
+                    </div>
+                    <div class="content-area" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:16px;padding:16px;">
+                        <div>
+                            <h3 style="margin-bottom:8px;font-size:1rem;color:var(--accent-gold);">快捷入口</h3>
+                            <button type="button" class="btn btn-secondary" style="width:100%;justify-content:flex-start;margin-bottom:8px;" onclick="openApiSettings()">
+                                ⚙ 配置 API 与模型
+                            </button>
+                            <button type="button" class="btn btn-secondary" style="width:100%;justify-content:flex-start;margin-bottom:8px;" onclick="openAuthOverlay()">
+                                👤 登录 / 管理账号
+                            </button>
+                            <button type="button" class="btn btn-secondary" style="width:100%;justify-content:flex-start;" onclick="openChatHistoryFromStart()">
+                                📜 打开聊天记录
+                            </button>
+                        </div>
+                        <div>
+                            <h3 style="margin-bottom:8px;font-size:1rem;color:var(--accent-gold);">最近冒险（预览）</h3>
+                            <div id="startRecentConversations" style="font-size:0.85rem;color:var(--text-secondary);max-height:180px;overflow-y:auto;">
+                                <p style="margin:4px 0;">暂无历史记录。开始一段新冒险后，这里会显示最近的世界线。</p>
+                            </div>
+                        </div>
+                    </div>
+                    <div style="text-align:center;color:var(--text-secondary);font-size:0.8rem;margin-top:4px;">
+                        <span>ASTRAL CHRONICLES · Azure Legend</span>
+                        <span style="margin:0 6px;">·</span>
+                        <a href="https://github.com/IMCEZ/page" target="_blank" rel="noopener" style="color:var(--accent-gold);text-decoration:none;">GitHub / IMCEZ/page</a>
+                    </div>
+                </section>
+            </main>
+        </div>
+    </div>
+
     <!-- 游戏主界面（角色创建完成后显示） -->
     <div id="game-view" style="display: none;">
         <div class="bg-texture"></div>
@@ -3291,7 +3354,7 @@ ${WORLD_LORE_SUMMARY}`;
     // 2) 提取 ``` 不带标记但内容是HTML的代码块
     processed = processed.replace(/```\s*\n?([\s\S]*?)```/g, function(match, code) {
         var trimmed = code.trim();
-        if (trimmed.match(/^<(!DOCTYPE|html|div|style|script|head|body|section|main|button|form|table|ul|ol|nav|header|footer|article|aside|p |h[1-6]|span|a |img |input|select|textarea|canvas|svg)/i)) {
+        if (trimmed.match(/^<(!DOCTYPE|html|div|style|script|head|body|section|main|button|form|table|ul|ol|nav|header|footer|article|aside|p |h[1-6]|span|a |img |input|select|textarea|canvas|svg|details|summary|think)/i)) {
             var idx = htmlBlocks.length;
             htmlBlocks.push(trimmed);
             return '%%HTML_BLOCK_' + idx + '%%';
@@ -3319,7 +3382,7 @@ ${WORLD_LORE_SUMMARY}`;
         if (hasStyledHtml || hasStyleTag || hasNestedHtml) {
             // 尝试分离：HTML部分和纯文本部分
             // 查找第一个HTML标签的起始位置
-            var firstTagMatch = processed.match(/(<(?:div|span|p|section|table|ul|ol|button|form|header|footer|nav|main|article|aside|style|h[1-6])[\s>])/i);
+            var firstTagMatch = processed.match(/(<(?:div|span|p|section|table|ul|ol|button|form|header|footer|nav|main|article|aside|style|h[1-6]|details|summary|think)[\s>])/i);
             if (firstTagMatch) {
                 var tagStart = processed.indexOf(firstTagMatch[0]);
                 var textBefore = processed.substring(0, tagStart).trim();
@@ -3386,7 +3449,25 @@ ${WORLD_LORE_SUMMARY}`;
             try {
                 var doc = iframe.contentDocument || iframe.contentWindow.document;
                 doc.open();
-                doc.write(htmlContent);
+                // 如果传入的是片段而不是完整 HTML 文档，为其包一层基础结构和样式
+                var finalHtml = htmlContent;
+                if (!/<!DOCTYPE\s+html|<html[\s>]/i.test(htmlContent)) {
+                    finalHtml =
+                        '<!DOCTYPE html><html><head><meta charset="utf-8">' +
+                        '<style>' +
+                        'body{margin:8px;font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,sans-serif;font-size:13px;line-height:1.5;color:#222;}' +
+                        'details{margin:4px 0;padding:4px 6px;border-radius:4px;background:#f7f7f7;border:1px solid #ddd;}' +
+                        'summary{cursor:pointer;font-weight:600;}' +
+                        'think,BLFX,QGFX,MSDS,ZCRW,NPCXD,LYXD{' +
+                        'display:block;margin:4px 0;padding:4px 6px;background:#111;color:#d4d4d4;' +
+                        'font-family:SFMono-Regular,Consolas,Menlo,monospace;font-size:12px;white-space:pre-wrap;word-break:break-all;' +
+                        'border-radius:4px;' +
+                        '}' +
+                        '</style></head><body>' +
+                        htmlContent +
+                        '</body></html>';
+                }
+                doc.write(finalHtml);
                 doc.close();
 
                 // 自适应高度
@@ -3900,6 +3981,36 @@ ${WORLD_LORE_SUMMARY}`;
             return new LocalChatStorage();
         }
 
+        async function loadRecentConversationsForStart(limit) {
+            limit = limit || 3;
+            const container = document.getElementById('startRecentConversations');
+            if (!container) return;
+            try {
+                if (!chatStorage) chatStorage = createChatStorage();
+                const list = await chatStorage.listConversations();
+                if (!list.length) {
+                    container.innerHTML = '<p style="margin:4px 0;">暂无历史记录。开始一段新冒险后，这里会显示最近的世界线。</p>';
+                    return;
+                }
+                const sliced = list.slice(0, limit);
+                const parts = sliced.map(function(c) {
+                    const title = escapeHtml(c.title || '未命名会话');
+                    const where = c.source === 'cloud' ? '云端' : '本地';
+                    const timeStr = c.updatedAt ? new Date(c.updatedAt).toLocaleString() : '';
+                    const safeId = String(c.id || '').replace(/'/g, "\\'");
+                    return '' +
+                        '<div style="padding:6px 4px;border-bottom:1px solid rgba(255,255,255,0.06);cursor:pointer;" onclick="goToGameFromStart(\'' + safeId + '\')">' +
+                            '<div style="font-size:0.9rem;color:#e8e8e8;white-space:nowrap;text-overflow:ellipsis;overflow:hidden;">' + title + '（' + where + '）</div>' +
+                            '<div style="font-size:0.75rem;color:var(--text-secondary);">' + escapeHtml(timeStr) + '</div>' +
+                        '</div>';
+                });
+                container.innerHTML = parts.join('');
+            } catch (e) {
+                console.warn('[StartView] 加载最近会话失败', e);
+                container.innerHTML = '<p style="margin:4px 0;">加载最近会话失败。</p>';
+            }
+        }
+
         async function syncGameHistoryToStorage() {
             try {
                 if (!chatStorage) chatStorage = createChatStorage();
@@ -4068,6 +4179,40 @@ ${WORLD_LORE_SUMMARY}`;
             } catch (e) {
                 console.warn('[ChatStorage] 创建新会话失败', e);
                 showToast('创建新会话失败：' + (e.message || '未知错误'));
+            }
+        }
+
+        function showStartView() {
+            const start = document.getElementById('start-view');
+            const creation = document.getElementById('creation-view');
+            const game = document.getElementById('game-view');
+            if (start) start.style.display = 'block';
+            if (creation) creation.style.display = 'none';
+            if (game) game.style.display = 'none';
+            loadRecentConversationsForStart(3);
+        }
+
+        function goToCreationFromStart() {
+            const start = document.getElementById('start-view');
+            const creation = document.getElementById('creation-view');
+            if (start) start.style.display = 'none';
+            if (creation) creation.style.display = 'block';
+            if (typeof goToStep === 'function') {
+                goToStep(1);
+            }
+        }
+
+        function goToGameFromStart(convId) {
+            const start = document.getElementById('start-view');
+            const creation = document.getElementById('creation-view');
+            const game = document.getElementById('game-view');
+            if (start) start.style.display = 'none';
+            if (creation) creation.style.display = 'none';
+            if (game) game.style.display = 'block';
+            if (convId) {
+                loadConversationIntoGame(convId);
+            } else if (!convId && typeof refreshChatHistoryList === 'function') {
+                refreshChatHistoryList();
             }
         }
 
@@ -4459,6 +4604,11 @@ ${WORLD_LORE_SUMMARY}`;
                 }
             } catch (_) {}
         });
+
+        function openAuthOverlay() {
+            const overlay = document.getElementById('authOverlay');
+            if (overlay) overlay.classList.remove('hidden');
+        }
 
         // ---------- 登录 / 注册一体化逻辑（Supabase + 游戏） ----------
         const API_BASE = "";
